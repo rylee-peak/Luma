@@ -42,7 +42,8 @@
     import { 
       Menu, X, Home, Calendar as CalendarIcon, CheckSquare, 
       Image as ImageIcon, Settings, LogOut, Plus, Bell, 
-      Sun, Monitor, UserPlus, Trash2, Clock, Megaphone, Star, Upload, Trophy, Target, Info, RefreshCw
+      Sun, Monitor, UserPlus, Trash2, Clock, Megaphone, Star, Upload, Trophy, Target, Info, RefreshCw,
+      Check, MapPin
     } from 'lucide-react';
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -130,6 +131,46 @@
           )}
         </div>
       );
+    }
+
+    // Global Error Boundary to catch React crashes and prevent blank screens
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null, errorInfo: null };
+      }
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+      componentDidCatch(error, errorInfo) {
+        console.error("ErrorBoundary caught an error:", error, errorInfo);
+        this.setState({ errorInfo });
+      }
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="min-h-screen bg-red-50 flex flex-col items-center justify-center p-8 text-center font-sans">
+              <div className="bg-white p-8 rounded-3xl shadow-xl max-w-2xl w-full border border-red-100">
+                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6"><Info size={32} /></div>
+                <h1 className="text-3xl font-bold text-red-600 mb-4">Something went wrong.</h1>
+                <p className="text-slate-600 mb-6 font-medium">The application encountered an unexpected error and could not continue rendering.</p>
+                <div className="bg-slate-50 p-4 rounded-xl text-left overflow-auto max-h-64 text-sm font-mono text-red-800 border border-slate-200">
+                  <strong>{this.state.error && this.state.error.toString()}</strong>
+                  <br/><br/>
+                  <span className="opacity-70">{this.state.errorInfo && this.state.errorInfo.componentStack}</span>
+                </div>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="mt-6 px-8 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-sm"
+                >
+                  Reload Application
+                </button>
+              </div>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
     }
 
     // Reusable Modal Component
@@ -1726,9 +1767,18 @@
 
     try {
       const root = createRoot(document.getElementById('root'));
-      root.render(<App />);
+      root.render(
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      );
     } catch (renderError) {
       console.error("Critical rendering error:", renderError);
+      document.getElementById('root').innerHTML = `
+        <div style="padding:40px; text-align:center; font-family:sans-serif; background:#fef2f2; color:#991b1b; height:100vh;">
+          <h1 style="margin-bottom:10px;">Critical App Error</h1>
+          <p>${renderError.message}</p>
+        </div>`;
     }
 
     try {
