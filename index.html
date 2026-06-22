@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Luma - Life, Organized.</title>
   
+  <!-- Link to the Web App Manifest for PWA installation -->
+  <link rel="manifest" href="/manifest.json">
+  
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
@@ -822,6 +825,21 @@
 
     const root = createRoot(document.getElementById('root'));
     root.render(<App />);
+
+    // --- SERVICE WORKER REGISTRATION ---
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((registration) => {
+            console.log('Service Worker registered successfully with scope: ', registration.scope);
+          })
+          .catch((error) => {
+            console.error('Service Worker registration failed: ', error);
+          });
+      });
+    } else {
+      console.log('Service Worker registration skipped (running in preview environment).');
+    }
   </script>
 </body>
 </html>
