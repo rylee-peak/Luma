@@ -41,7 +41,7 @@
     import { 
       Menu, X, Home, Calendar as CalendarIcon, CheckSquare, 
       Image as ImageIcon, Settings, LogOut, Plus, Bell, 
-      Sun, Monitor, UserPlus, Trash2, Clock, Megaphone, Star, Upload, Trophy, Target
+      Sun, Monitor, UserPlus, Trash2, Clock, Megaphone, Star, Upload, Trophy, Target, Info
     } from 'lucide-react';
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -102,6 +102,34 @@
       try { document.execCommand('copy'); } catch (err) { console.error('Unable to copy', err); }
       document.body.removeChild(textArea);
     };
+
+    // Reusable Error Alert Component
+    function ErrorAlert({ error }) {
+      const [showDetails, setShowDetails] = useState(false);
+      if (!error) return null;
+      return (
+        <div className="mb-6 bg-red-50 text-red-700 text-sm rounded-xl border border-red-100 overflow-hidden text-left fade-in">
+          <div className="p-3 flex items-start justify-between gap-2">
+            <span className="font-medium">{error.text}</span>
+            {error.details && (
+              <button 
+                type="button" 
+                onClick={(e) => { e.preventDefault(); setShowDetails(!showDetails); }} 
+                className="text-red-500 hover:text-red-800 shrink-0 mt-0.5" 
+                title="View Technical Details"
+              >
+                <Info size={16} />
+              </button>
+            )}
+          </div>
+          {showDetails && error.details && (
+            <div className="p-3 bg-red-100/50 border-t border-red-100 text-xs font-mono break-words text-red-800">
+              {error.details}
+            </div>
+          )}
+        </div>
+      );
+    }
 
     // Reusable Modal Component
     function Modal({ isOpen, onClose, title, children }) {
@@ -453,15 +481,20 @@
       const [houseName, setHouseName] = useState("");
       const [inviteCode, setInviteCode] = useState("");
       const [isLoading, setIsLoading] = useState(false);
-      const [errorMsg, setErrorMsg] = useState("");
+      const [errorInfo, setErrorInfo] = useState(null);
 
       const handleCreate = async (e) => {
         e.preventDefault();
         setIsLoading(true);
-        setErrorMsg("");
+        setErrorInfo(null);
         try {
           const newHouseholdId = 'house_' + Date.now();
-          const newMember = { id: user.uid, email: user.email, name: user.displayName || 'You', role: 'Owner', points: 0 };
+          
+          // CRITICAL FIX: Ensure no fields are undefined before saving to Firestore.
+          const userEmail = user.email || '';
+          const userName = user.displayName || 'You';
+          
+          const newMember = { id: user.uid, email: userEmail, name: userName, role: 'Owner', points: 0 };
           const newHousehold = { name: houseName, id: newHouseholdId, members: [newMember], inviteCode: Math.random().toString(36).substring(2, 8).toUpperCase() };
           
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'households', newHouseholdId), newHousehold);
@@ -471,15 +504,16 @@
           setMembers([newMember]);
         } catch (error) {
           console.error(error);
-          setErrorMsg("Error creating household.");
+          setErrorInfo({ text: "Error creating household.", details: error.message });
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       };
 
       const handleJoin = async (e) => {
         e.preventDefault();
         setIsLoading(true);
-        setErrorMsg("");
+        setErrorInfo(null);
         if(inviteCode.length === 6) {
           try {
             // Query Cloud for the Invite Code
@@ -489,7 +523,10 @@
             if (!querySnapshot.empty) {
               const hDoc = querySnapshot.docs[0];
               const hData = hDoc.data();
-              const newMember = { id: user.uid, email: user.email, name: user.displayName || 'You', role: 'Member', points: 0 };
+              
+              const userEmail = user.email || '';
+              const userName = user.displayName || 'You';
+              const newMember = { id: user.uid, email: userEmail, name: userName, role: 'Member', points: 0 };
               
               // Prevent Duplicate Member entries
               const memberExists = hData.members && hData.members.some(m => m.id === user.uid);
@@ -501,14 +538,14 @@
               setHousehold(hData);
               setMembers(updatedMembers);
             } else {
-              setErrorMsg("Invalid or expired invite code.");
+              setErrorInfo({ text: "Invalid or expired invite code.", details: "No household found matching this 6-digit code." });
             }
           } catch (error) {
             console.error(error);
-            setErrorMsg("Error joining household.");
+            setErrorInfo({ text: "Error joining household.", details: error.message });
           }
         } else {
-          setErrorMsg("Invalid code format. Codes are 6 characters.");
+          setErrorInfo({ text: "Invalid code format.", details: "Codes must be exactly 6 characters long." });
         }
         setIsLoading(false);
       };
@@ -529,7 +566,7 @@
               <>
                 <h1 className="text-3xl font-bold mb-2">Welcome to Luma</h1>
                 <p className="text-slate-500 mb-8">Does your family already use Luma, or are you setting up a new home hub?</p>
-                {errorMsg && <div className="mb-6 p-3 bg-red-50 text-red-700 text-sm rounded-xl font-medium border border-red-100">{errorMsg}</div>}
+                <ErrorAlert error={errorInfo} />
                 <div className="space-y-4">
                   <button onClick={() => setView('create')} className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
                     <Plus size={20} /> Create New Household
@@ -543,9 +580,9 @@
 
             {view === 'create' && (
               <form onSubmit={handleCreate} className="text-left animate-in fade-in">
-                <button type="button" onClick={() => { setView('select'); setErrorMsg(""); }} className="text-slate-400 hover:text-slate-800 mb-4 flex items-center gap-1 text-sm"><X size={16}/> Back</button>
+                <button type="button" onClick={() => { setView('select'); setErrorInfo(null); }} className="text-slate-400 hover:text-slate-800 mb-4 flex items-center gap-1 text-sm"><X size={16}/> Back</button>
                 <h2 className="text-2xl font-bold mb-6">Name your household</h2>
-                {errorMsg && <div className="mb-6 p-3 bg-red-50 text-red-700 text-sm rounded-xl font-medium border border-red-100">{errorMsg}</div>}
+                <ErrorAlert error={errorInfo} />
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-slate-700 mb-2">Household Name</label>
                   <input required autoFocus value={houseName} onChange={e => setHouseName(e.target.value)} placeholder="e.g. The Smiths" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
@@ -556,9 +593,9 @@
 
             {view === 'join' && (
               <form onSubmit={handleJoin} className="text-left animate-in fade-in">
-                <button type="button" onClick={() => { setView('select'); setErrorMsg(""); }} className="text-slate-400 hover:text-slate-800 mb-4 flex items-center gap-1 text-sm"><X size={16}/> Back</button>
+                <button type="button" onClick={() => { setView('select'); setErrorInfo(null); }} className="text-slate-400 hover:text-slate-800 mb-4 flex items-center gap-1 text-sm"><X size={16}/> Back</button>
                 <h2 className="text-2xl font-bold mb-6">Enter Invite Code</h2>
-                {errorMsg && <div className="mb-6 p-3 bg-red-50 text-red-700 text-sm rounded-xl font-medium border border-red-100">{errorMsg}</div>}
+                <ErrorAlert error={errorInfo} />
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-slate-700 mb-2">6-Digit Code (from Admin)</label>
                   <input required autoFocus maxLength={6} value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())} placeholder="ABCDEF" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-mono text-center tracking-widest text-lg uppercase" />
@@ -981,7 +1018,7 @@
       const [displays, setDisplays] = useState([]);
       const [showLinkInput, setShowLinkInput] = useState(false);
       const [linkCode, setLinkCode] = useState("");
-      const [linkError, setLinkError] = useState("");
+      const [linkError, setLinkError] = useState(null);
       const [isLinking, setIsLinking] = useState(false);
       const [activeTab, setActiveTab] = useState('profile');
       const [message, setMessage] = useState({ text: "", type: "success" });
@@ -1000,7 +1037,7 @@
       const handleLink = async () => {
         if(linkCode.length === 6) {
           setIsLinking(true);
-          setLinkError("");
+          setLinkError(null);
           try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pairing_codes', linkCode);
             const snap = await getDoc(docRef);
@@ -1011,11 +1048,11 @@
               setShowLinkInput(false);
               setLinkCode("");
             } else {
-              setLinkError("Invalid or expired code.");
+              setLinkError({ text: "Invalid or expired code.", details: "Code not found in the database." });
             }
           } catch(err) {
             console.error(err);
-            setLinkError("An error occurred. Try again.");
+            setLinkError({ text: "An error occurred. Try again.", details: err.message });
           } finally {
             setIsLinking(false);
           }
@@ -1161,9 +1198,9 @@
                         <button onClick={handleLink} disabled={linkCode.length !== 6 || isLinking} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors">
                           {isLinking ? 'Linking...' : 'Link'}
                         </button>
-                        <button onClick={() => { setShowLinkInput(false); setLinkCode(""); setLinkError(""); }} className="text-slate-500 hover:text-slate-800 p-2"><X size={20} /></button>
+                        <button onClick={() => { setShowLinkInput(false); setLinkCode(""); setLinkError(null); }} className="text-slate-500 hover:text-slate-800 p-2"><X size={20} /></button>
                       </div>
-                      {linkError && <p className="text-red-500 text-sm mt-2 font-medium px-2">{linkError}</p>}
+                      <div className="mt-2"><ErrorAlert error={linkError} /></div>
                     </div>
                   )}
 
@@ -1314,7 +1351,7 @@
       const [isRegistering, setIsRegistering] = useState(false);
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
-      const [authError, setAuthError] = useState("");
+      const [authError, setAuthError] = useState(null);
       const [isAuthenticating, setIsAuthenticating] = useState(false);
 
       useEffect(() => {
@@ -1337,7 +1374,7 @@
       }, [isPairingMode, onPairDisplay]);
 
       const handleGoogleLogin = async () => {
-        setAuthError("");
+        setAuthError(null);
         const provider = new GoogleAuthProvider();
         provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
         provider.addScope('https://www.googleapis.com/auth/calendar.events');
@@ -1345,13 +1382,13 @@
           await signInWithPopup(auth, provider);
           if (onLoginSuccess) onLoginSuccess();
         } catch (error) {
-          setAuthError(error.message.replace("Firebase: ", ""));
+          setAuthError({ text: "Google Sign-In failed.", details: error.message });
         }
       };
 
       const handleEmailAuth = async (e) => {
         e.preventDefault();
-        setAuthError("");
+        setAuthError(null);
         setIsAuthenticating(true);
         try {
           if (isRegistering) {
@@ -1361,7 +1398,7 @@
           }
           if (onLoginSuccess) onLoginSuccess();
         } catch (error) {
-          setAuthError(error.message.replace("Firebase: ", ""));
+          setAuthError({ text: "Authentication failed.", details: error.message });
         } finally {
           setIsAuthenticating(false);
         }
@@ -1400,7 +1437,7 @@
           <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
             <div className="bg-white py-8 px-4 shadow-sm sm:rounded-3xl sm:px-10 border border-slate-200">
               
-              {authError && <div className="mb-6 p-3 bg-red-50 text-red-700 text-sm rounded-xl font-medium border border-red-100">{authError}</div>}
+              <ErrorAlert error={authError} />
 
               <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
                 <div>
@@ -1417,7 +1454,7 @@
               </form>
 
               <div className="text-center mb-6">
-                <button onClick={() => { setIsRegistering(!isRegistering); setAuthError(""); }} className="text-sm font-medium text-blue-600 hover:underline">
+                <button onClick={() => { setIsRegistering(!isRegistering); setAuthError(null); }} className="text-sm font-medium text-blue-600 hover:underline">
                   {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
                 </button>
               </div>
