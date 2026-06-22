@@ -56,9 +56,10 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { 
       getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, 
-      createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup
+      createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup,
+      signInAnonymously, signInWithCustomToken
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDJ7p0VmrQXpzqOjXPAFk-g7jm4VylcsEQ",
@@ -72,6 +73,7 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'luma-default';
 
     const GOOGLE_CLIENT_ID = "489460227318-ph3kmm3avb82p02l073pd897746fogt8.apps.googleusercontent.com";
 
@@ -134,10 +136,24 @@
       const [inviteEmail, setInviteEmail] = useState("");
 
       useEffect(() => {
+        const initAuth = async () => {
+          try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+              await signInAnonymously(auth);
+            }
+          } catch (err) {
+            console.error("Auth init error:", err);
+          }
+        };
+        initAuth();
+
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
           setUser(currentUser);
           setIsAuthLoading(false);
-          if (currentUser) {
+          // If the user is fully logged in (not an anonymous pairing device)
+          if (currentUser && !currentUser.isAnonymous) {
             setHousehold({ name: "Luma", id: 'local_h_123' });
             if(members.length === 0) {
                setMembers([{ id: currentUser.uid, email: currentUser.email || 'user@example.com', name: currentUser.displayName || 'You', role: 'Owner' }]);
@@ -199,8 +215,9 @@
         return <KioskMode onExit={() => setPairedHousehold(null)} household={pairedHousehold} events={events} chores={chores} />;
       }
 
-      if (!user) {
-        return <AuthScreen onPairDisplay={(linkedHousehold) => setPairedHousehold(linkedHousehold)} />;
+      // If the user isn't fully authenticated, force them to the login/setup screen
+      if (!user || user.isAnonymous) {
+        return <AuthScreen onPairDisplay={(linkedHousehold) => setPairedHousehold(linkedHousehold)} user={user} />;
       }
 
       if (currentView === 'kiosk') {
@@ -722,12 +739,36 @@
       const [displays, setDisplays] = useState([]);
       const [showLinkInput, setShowLinkInput] = useState(false);
       const [linkCode, setLinkCode] = useState("");
+      const [linkError, setLinkError] = useState("");
+      const [isLinking, setIsLinking] = useState(false);
 
-      const handleLink = () => {
+      const handleLink = async () => {
         if(linkCode.length === 6) {
-          setDisplays([...displays, { id: Date.now(), name: "Luma Display", status: "Online" }]);
-          setShowLinkInput(false);
-          setLinkCode("");
+          setIsLinking(true);
+          setLinkError("");
+          try {
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pairing_codes', linkCode);
+            const snap = await getDoc(docRef);
+            
+            if (snap.exists() && snap.data().status === 'waiting') {
+              // Confirm the link in the database so the display unlocks
+              await updateDoc(docRef, { 
+                status: 'linked', 
+                household: { name: "Luma", id: "local_h_123" } 
+              });
+              
+              setDisplays([...displays, { id: Date.now(), name: "Luma Display", status: "Online" }]);
+              setShowLinkInput(false);
+              setLinkCode("");
+            } else {
+              setLinkError("Invalid or expired code.");
+            }
+          } catch (err) {
+            console.error(err);
+            setLinkError("Network error. Please try again.");
+          } finally {
+            setIsLinking(false);
+          }
         }
       };
 
@@ -773,10 +814,15 @@
               </div>
               
               {showLinkInput && (
-                <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl flex gap-3 items-center flex-wrap sm:flex-nowrap">
-                  <input type="text" maxLength={6} placeholder="Enter 6-digit code" value={linkCode} onChange={(e) => setLinkCode(e.target.value.toUpperCase())} className="flex-1 min-w-[150px] px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase tracking-wider text-center sm:text-left"/>
-                  <button onClick={handleLink} disabled={linkCode.length !== 6} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors">Link</button>
-                  <button onClick={() => { setShowLinkInput(false); setLinkCode(""); }} className="text-slate-500 hover:text-slate-800 p-2"><X size={20} /></button>
+                <div className="mb-4">
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex gap-3 items-center flex-wrap sm:flex-nowrap">
+                    <input type="text" maxLength={6} placeholder="Enter 6-digit code" value={linkCode} onChange={(e) => setLinkCode(e.target.value.toUpperCase())} className="flex-1 min-w-[150px] px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase tracking-wider text-center sm:text-left"/>
+                    <button onClick={handleLink} disabled={linkCode.length !== 6 || isLinking} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors">
+                      {isLinking ? 'Linking...' : 'Link'}
+                    </button>
+                    <button onClick={() => { setShowLinkInput(false); setLinkCode(""); setLinkError(""); }} className="text-slate-500 hover:text-slate-800 p-2"><X size={20} /></button>
+                  </div>
+                  {linkError && <p className="text-red-500 text-sm mt-2 font-medium px-2">{linkError}</p>}
                 </div>
               )}
 
@@ -808,89 +854,7 @@
       );
     }
 
-    function KioskMode({ onExit, household, events, chores }) {
-      const [time, setTime] = useState(new Date());
-
-      useEffect(() => {
-        const timer = setInterval(() => setTime(new Date()), 1000);
-        return () => clearInterval(timer);
-      }, []);
-
-      const todayEvents = events.filter(e => e.date === parseInt(new Date().getDate()) || e.date === 22);
-      const pendingChores = chores.filter(c => !c.done);
-
-      return (
-        <div className="fixed inset-0 bg-[#0F172A] text-white z-[100] flex flex-col p-8 overflow-hidden select-none fade-in">
-          <div className="absolute top-0 left-0 w-20 h-20 z-50 cursor-pointer" onClick={onExit} />
-          
-          <header className="flex justify-between items-start mb-12">
-            <div>
-              <h2 className="text-2xl font-medium text-slate-400">{household?.name || 'Luma Display'}</h2>
-              <p className="text-xl text-blue-400 flex items-center gap-2 mt-2"><Sun size={24} /> 72° Sunny</p>
-            </div>
-            <div className="text-right">
-              <h1 className="text-8xl font-bold tracking-tighter">
-                {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </h1>
-              <p className="text-2xl text-slate-400 mt-2 font-medium">
-                {time.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
-              </p>
-            </div>
-          </header>
-
-          <div className="grid grid-cols-3 gap-8 flex-1">
-            <div className="col-span-1 bg-slate-800/50 rounded-3xl p-8 border border-slate-700/50 backdrop-blur-md flex flex-col">
-              <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                 <CheckSquare className="text-orange-500" /> Today's Tasks
-              </h3>
-              <div className="space-y-4 flex-1 overflow-hidden">
-                {chores.length > 0 ? (
-                  chores.map(chore => (
-                    <div key={chore.id} className="flex items-center gap-4 text-xl">
-                      <div className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center ${chore.done ? 'bg-orange-500 border-orange-500 text-white' : 'border-slate-500 text-transparent'}`}>✓</div>
-                      <span className={chore.done ? 'text-slate-500 line-through' : 'text-slate-200'}>{chore.title}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500 pb-12">
-                     <CheckSquare size={48} className="mb-4 opacity-30" />
-                     <p className="text-xl font-medium">No tasks assigned.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="col-span-2 bg-slate-800/50 rounded-3xl p-8 border border-slate-700/50 backdrop-blur-md flex flex-col">
-               <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                 <CalendarIcon className="text-blue-500" /> Upcoming Schedule
-              </h3>
-              <div className="space-y-6 flex-1 overflow-hidden">
-                 {todayEvents.length > 0 ? (
-                   todayEvents.map(event => (
-                    <div key={event.id} className="flex items-center gap-6 bg-slate-900/50 p-6 rounded-2xl">
-                      <div className="text-3xl font-bold text-blue-400 w-32">{event.time}</div>
-                      <div className={`w-2 h-16 rounded-full ${event.color}`}></div>
-                      <div>
-                        <h4 className="text-2xl font-bold text-white">{event.title}</h4>
-                        <p className="text-xl text-slate-400">{event.category}</p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500 pb-20">
-                     <CalendarIcon size={64} className="mb-4 opacity-30" />
-                     <p className="text-2xl font-medium text-slate-400">Clear calendar ahead.</p>
-                     <p className="text-lg mt-2">Enjoy your day!</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    function AuthScreen({ onPairDisplay }) {
+    function AuthScreen({ onPairDisplay, user }) {
       const [isPairingMode, setIsPairingMode] = useState(false);
       const [pairingCode, setPairingCode] = useState("");
       
@@ -901,11 +865,34 @@
       const [isAuthenticating, setIsAuthenticating] = useState(false);
 
       useEffect(() => {
-        if (isPairingMode && !pairingCode) {
+        let unsub = () => {};
+        if (isPairingMode && user) {
+          // Generate a secure 6-character code
           const code = Math.random().toString(36).substring(2, 8).toUpperCase();
           setPairingCode(code);
+          
+          // Write the code to the cloud
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pairing_codes', code);
+          setDoc(docRef, { status: 'waiting', createdAt: serverTimestamp() }).catch(console.error);
+          
+          // Listen for the phone to confirm the link
+          unsub = onSnapshot(docRef, (snap) => {
+             if (snap.exists() && snap.data().status === 'linked') {
+                 onPairDisplay(snap.data().household);
+                 deleteDoc(docRef).catch(console.error); // Clean up the code
+             }
+          }, (err) => console.error("Pairing stream error:", err));
         }
-      }, [isPairingMode, pairingCode]);
+        return () => unsub();
+      }, [isPairingMode, user, onPairDisplay]);
+
+      const handleCancelPairing = () => {
+         setIsPairingMode(false);
+         setPairingCode("");
+         if (pairingCode) {
+             deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pairing_codes', pairingCode)).catch(console.error);
+         }
+      };
 
       const handleGoogleLogin = async () => {
         setAuthError("");
@@ -954,7 +941,7 @@
                    <div className="w-5 h-5 border-2 border-slate-300 border-t-[#2563EB] rounded-full animate-spin"></div>
                    <span className="font-medium">Waiting for connection...</span>
                  </div>
-                 <button onClick={() => { setIsPairingMode(false); setPairingCode(""); }} className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
+                 <button onClick={handleCancelPairing} className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
               </div>
             </div>
           </div>
