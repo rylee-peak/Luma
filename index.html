@@ -236,18 +236,18 @@
                 // Simple WMO Weather Code Mapping
                 let condition = 'Clear';
                 let WIcon = Sun;
-                if (code >= 1 && code <= 3) { condition = 'Cloudy'; WIcon = Cloud; }
-                if (code >= 45 && code <= 48) { condition = 'Foggy'; WIcon = CloudFog; }
-                if (code >= 51 && code <= 67) { condition = 'Rain'; WIcon = CloudRain; }
-                if (code >= 71 && code <= 77) { condition = 'Snow'; WIcon = Snowflake; }
-                if (code >= 95) { condition = 'Storm'; WIcon = CloudLightning; }
+                if (code >= 1 && code <= 3) { condition = 'Cloudy'; WIcon = Sun; } // Simplified icons for prototype
+                if (code >= 45 && code <= 48) { condition = 'Foggy'; }
+                if (code >= 51 && code <= 67) { condition = 'Rain'; }
+                if (code >= 71 && code <= 77) { condition = 'Snow'; }
+                if (code >= 95) { condition = 'Storm'; }
                 
                 setWeather({ temp, condition, icon: WIcon });
               }
             }
           } catch (e) {
             console.error("Failed to fetch weather", e);
-            setWeather({ temp: '--', condition: 'Offline', icon: CloudOff });
+            setWeather({ temp: '--', condition: 'Offline', icon: Sun });
           }
         };
         
@@ -1542,6 +1542,7 @@
     function AuthScreen({ onPairDisplay, onLoginSuccess }) {
       const [isPairingMode, setIsPairingMode] = useState(false);
       const [pairingCode, setPairingCode] = useState("");
+      const [pairingError, setPairingError] = useState(null);
       const [isRegistering, setIsRegistering] = useState(false);
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
@@ -1553,16 +1554,25 @@
         if (isPairingMode) {
           const code = Math.random().toString(36).substring(2, 8).toUpperCase();
           setPairingCode(code);
+          setPairingError(null);
           
           const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pairing_codes', code);
-          setDoc(docRef, { status: 'waiting', createdAt: serverTimestamp() }).catch(console.error);
+          
+          setDoc(docRef, { status: 'waiting', createdAt: serverTimestamp() }).catch(err => {
+             console.error(err);
+             setPairingError({ text: "Failed to generate pairing code. Please check your internet or Firebase Rules.", details: err.message });
+          });
           
           unsub = onSnapshot(docRef, (snap) => {
              if (snap.exists() && snap.data().status === 'linked') {
                  onPairDisplay(snap.data().household);
+                 // Cleanup the code after successful link
                  deleteDoc(docRef).catch(console.error);
              }
-          }, (err) => console.error(err));
+          }, (err) => {
+             console.error(err);
+             setPairingError({ text: "Lost connection to the pairing server.", details: err.message });
+          });
         }
         return () => unsub();
       }, [isPairingMode, onPairDisplay]);
@@ -1612,12 +1622,15 @@
             </div>
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
               <div className="bg-white py-12 px-4 shadow-sm sm:rounded-3xl sm:px-10 border border-slate-200 text-center relative overflow-hidden">
+                 
+                 <ErrorAlert error={pairingError} />
+
                  <div className="text-5xl sm:text-6xl font-mono tracking-[0.15em] font-bold text-[#2563EB] mb-8 select-all">{pairingCode || "------"}</div>
                  <div className="flex items-center justify-center gap-3 text-slate-500 mb-8">
                    <div className="w-5 h-5 border-2 border-slate-300 border-t-[#2563EB] rounded-full animate-spin"></div>
                    <span className="font-medium">Waiting for connection...</span>
                  </div>
-                 <button onClick={() => { setIsPairingMode(false); setPairingCode(""); }} className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
+                 <button onClick={() => { setIsPairingMode(false); setPairingCode(""); setPairingError(null); }} className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
               </div>
             </div>
           </div>
