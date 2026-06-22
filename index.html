@@ -189,6 +189,10 @@
       const [announcementTitle, setAnnouncementTitle] = useState("");
       const [announcementText, setAnnouncementText] = useState("");
 
+      // Weather & Location States
+      const [zipCode, setZipCode] = useState(() => safeGetStorage('luma_zip', '92551'));
+      const [weather, setWeather] = useState({ temp: '--', condition: 'Loading...', icon: Sun });
+
       useEffect(() => { safeSetStorage('luma_pairedHousehold', pairedHousehold); }, [pairedHousehold]);
       useEffect(() => { safeSetStorage('luma_events', events); }, [events]);
       useEffect(() => { safeSetStorage('luma_chores', chores); }, [chores]);
@@ -209,6 +213,50 @@
           await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'households', newHousehold.id), { name: newHousehold.name, inviteCode: newHousehold.inviteCode || null }).catch(console.error);
         }
       };
+
+      // FETCH REAL WEATHER FROM OPEN-METEO API
+      useEffect(() => {
+        const fetchWeather = async () => {
+          try {
+            safeSetStorage('luma_zip', zipCode);
+            // 1. Get Lat/Lon from Zip or City Name
+            const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(zipCode)}&count=1&language=en&format=json`);
+            const geoData = await geoRes.json();
+            
+            if (geoData.results && geoData.results.length > 0) {
+              const { latitude, longitude } = geoData.results[0];
+              // 2. Fetch current weather
+              const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&temperature_unit=fahrenheit`);
+              const weatherData = await weatherRes.json();
+              
+              if(weatherData.current_weather) {
+                const temp = Math.round(weatherData.current_weather.temperature);
+                const code = weatherData.current_weather.weathercode;
+                
+                // Simple WMO Weather Code Mapping
+                let condition = 'Clear';
+                let WIcon = Sun;
+                if (code >= 1 && code <= 3) { condition = 'Cloudy'; WIcon = Cloud; }
+                if (code >= 45 && code <= 48) { condition = 'Foggy'; WIcon = CloudFog; }
+                if (code >= 51 && code <= 67) { condition = 'Rain'; WIcon = CloudRain; }
+                if (code >= 71 && code <= 77) { condition = 'Snow'; WIcon = Snowflake; }
+                if (code >= 95) { condition = 'Storm'; WIcon = CloudLightning; }
+                
+                setWeather({ temp, condition, icon: WIcon });
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch weather", e);
+            setWeather({ temp: '--', condition: 'Offline', icon: CloudOff });
+          }
+        };
+        
+        // Add a small debounce so it doesn't spam the API while typing
+        const timeoutId = setTimeout(() => {
+          if (zipCode) fetchWeather();
+        }, 1000);
+        return () => clearTimeout(timeoutId);
+      }, [zipCode]);
 
       // INITIALIZE AUTH FIRST (Rule 3)
       useEffect(() => {
@@ -307,7 +355,7 @@
 
       // 1. If viewing as a linked Kiosk Display (No standard user auth required)
       if (pairedHousehold) {
-        return <KioskMode onExit={() => setPairedHousehold(null)} household={pairedHousehold} events={events} chores={chores} announcements={announcements} members={members} />;
+        return <KioskMode onExit={() => setPairedHousehold(null)} household={pairedHousehold} events={events} chores={chores} announcements={announcements} members={members} weather={weather} />;
       }
 
       const hasRealProvider = user?.providerData?.length > 0;
@@ -331,7 +379,7 @@
 
       // 4. User clicked Kiosk Mode inside their own app
       if (currentView === 'kiosk') {
-        return <KioskMode onExit={() => setCurrentView('dashboard')} household={household} events={events} chores={chores} announcements={announcements} members={members} />;
+        return <KioskMode onExit={() => setCurrentView('dashboard')} household={household} events={events} chores={chores} announcements={announcements} members={members} weather={weather} />;
       }
 
       const currentUserMember = members.find(m => m.id === user.uid);
@@ -468,7 +516,7 @@
               {currentView === 'chores' && <ChoresView chores={chores} setChores={setChores} members={members} setMembers={updateHouseholdMembers} onAddChore={() => setIsChoreModalOpen(true)} isAdmin={isAdmin} />}
               {currentView === 'progress' && <ProgressView members={members} familyGoal={familyGoal} />}
               {currentView === 'photos' && <PhotosView photos={photos} setPhotos={setPhotos} />}
-              {currentView === 'settings' && <SettingsView user={user} household={household} setHousehold={updateHouseholdData} members={members} setMembers={updateHouseholdMembers} isAdmin={isAdmin} />}
+              {currentView === 'settings' && <SettingsView user={user} household={household} setHousehold={updateHouseholdData} members={members} setMembers={updateHouseholdMembers} isAdmin={isAdmin} zipCode={zipCode} setZipCode={setZipCode} />}
             </div>
           </main>
         </div>
@@ -1022,7 +1070,7 @@
       );
     }
 
-    function SettingsView({ user, household, setHousehold, members, setMembers, isAdmin }) {
+    function SettingsView({ user, household, setHousehold, members, setMembers, isAdmin, zipCode, setZipCode }) {
       const [displays, setDisplays] = useState([]);
       const [showLinkInput, setShowLinkInput] = useState(false);
       const [linkCode, setLinkCode] = useState("");
@@ -1041,6 +1089,11 @@
       const [googleConnected, setGoogleConnected] = useState(user?.providerData?.some(p => p.providerId === 'google.com') || false);
       const [appleConnected, setAppleConnected] = useState(false);
       const [outlookConnected, setOutlookConnected] = useState(false);
+
+      // Integration Modals
+      const [showAppleModal, setShowAppleModal] = useState(false);
+      const [showOutlookModal, setShowOutlookModal] = useState(false);
+      const [isAuthenticatingIntegration, setIsAuthenticatingIntegration] = useState(false);
 
       const showMessage = (text, type = 'success') => {
          setMessage({ text, type });
@@ -1253,6 +1306,40 @@
                     </div>
                   </div>
 
+                  {/* Modals for simulated OAuth connections */}
+                  <Modal isOpen={showAppleModal} onClose={() => setShowAppleModal(false)} title="Connect Apple Calendar">
+                    <div className="space-y-4">
+                      <p className="text-sm text-slate-600">To sync iCloud, please generate an App-Specific Password at appleid.apple.com.</p>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Apple ID</label>
+                        <input type="email" placeholder="email@icloud.com" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">App-Specific Password</label>
+                        <input type="password" placeholder="xxxx-xxxx-xxxx-xxxx" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+                      </div>
+                      <button onClick={() => {
+                        setIsAuthenticatingIntegration(true);
+                        setTimeout(() => { setIsAuthenticatingIntegration(false); setShowAppleModal(false); setAppleConnected(true); showMessage("Apple Calendar Linked"); }, 1500);
+                      }} disabled={isAuthenticatingIntegration} className="w-full py-3 mt-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-black transition-colors disabled:opacity-50">
+                        {isAuthenticatingIntegration ? 'Verifying...' : 'Sign In securely'}
+                      </button>
+                    </div>
+                  </Modal>
+
+                  <Modal isOpen={showOutlookModal} onClose={() => setShowOutlookModal(false)} title="Microsoft Sign In">
+                    <div className="space-y-6 text-center py-4">
+                      <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold">M</div>
+                      <p className="text-slate-600">You will be securely redirected to Microsoft.com to authorize Luma to view your calendar events.</p>
+                      <button onClick={() => {
+                        setIsAuthenticatingIntegration(true);
+                        setTimeout(() => { setIsAuthenticatingIntegration(false); setShowOutlookModal(false); setOutlookConnected(true); showMessage("Outlook Connected"); }, 1500);
+                      }} disabled={isAuthenticatingIntegration} className="w-full py-3 bg-[#0078D4] text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">
+                        {isAuthenticatingIntegration ? 'Redirecting...' : 'Continue to Microsoft'}
+                      </button>
+                    </div>
+                  </Modal>
+
                   <div className="space-y-8">
                     {/* Calendars Section */}
                     <div>
@@ -1268,7 +1355,7 @@
                              <div>
                                <p className="font-bold text-sm">Google Calendar</p>
                                <p className={`text-xs font-medium flex items-center gap-1 ${googleConnected ? 'text-green-600' : 'text-slate-400'}`}>
-                                  {googleConnected ? <><Check size={12}/> Connected</> : 'Not connected'}
+                                  {googleConnected ? <><Check size={12}/> Connected via Auth</> : 'Not connected'}
                                </p>
                              </div>
                           </div>
@@ -1295,7 +1382,7 @@
                           {appleConnected ? (
                             <button onClick={() => setAppleConnected(false)} className="text-slate-400 hover:text-red-500 text-sm font-medium">Disconnect</button>
                           ) : (
-                            <button onClick={() => {setAppleConnected(true); showMessage("Apple Calendar Synced!");}} className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Connect</button>
+                            <button onClick={() => setShowAppleModal(true)} className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Connect</button>
                           )}
                         </div>
                         
@@ -1315,7 +1402,7 @@
                           {outlookConnected ? (
                             <button onClick={() => setOutlookConnected(false)} className="text-slate-400 hover:text-red-500 text-sm font-medium">Disconnect</button>
                           ) : (
-                            <button onClick={() => {setOutlookConnected(true); showMessage("Outlook Calendar Synced!");}} className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Connect</button>
+                            <button onClick={() => setShowOutlookModal(true)} className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Connect</button>
                           )}
                         </div>
                       </div>
@@ -1327,7 +1414,7 @@
                       <div className="p-5 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-3">
                         <p className="text-sm text-slate-500">Set your household location to display accurate, local weather on the Dashboard and Kiosk Display.</p>
                         <div className="flex gap-3 max-w-sm mt-2">
-                          <input type="text" placeholder="Zip Code or City" defaultValue="92551" className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"/>
+                          <input type="text" placeholder="Zip Code or City" value={zipCode} onChange={(e) => setZipCode(e.target.value)} className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"/>
                           <button onClick={() => showMessage("Location Saved!")} className="bg-slate-800 text-white px-5 py-2 rounded-lg font-bold hover:bg-slate-900 transition-colors">Save</button>
                         </div>
                       </div>
@@ -1343,7 +1430,7 @@
     }
 
     // --- KIOSK MODE (Luma Display) ---
-    function KioskMode({ onExit, household, events, chores, announcements, members }) {
+    function KioskMode({ onExit, household, events, chores, announcements, members, weather }) {
       const [time, setTime] = useState(new Date());
 
       useEffect(() => {
@@ -1363,7 +1450,7 @@
             <div>
               <h2 className="text-3xl font-bold text-slate-500">{household?.name || 'Luma'}</h2>
               <p className="text-2xl text-blue-600 flex items-center gap-2 mt-2 font-medium">
-                 <Sun size={28} /> 72° Sunny
+                 {weather && weather.icon && <weather.icon size={28} />} {weather?.temp}° {weather?.condition}
               </p>
             </div>
             <div className="text-right">
