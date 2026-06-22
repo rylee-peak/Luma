@@ -230,7 +230,7 @@
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
           if (currentUser && !currentUser.isAnonymous) {
             try {
-              // 1. Check if user is linked to a household in the cloud (Rule 1 Paths)
+              // 1. Check if user is linked to a household in the cloud
               const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
               const userSnap = await getDoc(userRef);
               
@@ -490,7 +490,6 @@
         try {
           const newHouseholdId = 'house_' + Date.now();
           
-          // CRITICAL FIX: Ensure no fields are undefined before saving to Firestore.
           const userEmail = user.email || '';
           const userName = user.displayName || 'You';
           
@@ -504,7 +503,11 @@
           setMembers([newMember]);
         } catch (error) {
           console.error(error);
-          setErrorInfo({ text: "Error creating household.", details: error.message });
+          let detailMsg = error.message;
+          if (error.message.includes('Missing or insufficient permissions')) {
+            detailMsg = "Permission Denied: Your Firebase Security Rules are blocking this action. Please go to your Firebase Console > Firestore Database > Rules, and update them to allow access to the /artifacts/ path.";
+          }
+          setErrorInfo({ text: "Error creating household.", details: detailMsg });
         } finally {
           setIsLoading(false);
         }
@@ -542,7 +545,11 @@
             }
           } catch (error) {
             console.error(error);
-            setErrorInfo({ text: "Error joining household.", details: error.message });
+            let detailMsg = error.message;
+            if (error.message.includes('Missing or insufficient permissions')) {
+              detailMsg = "Permission Denied: Your Firebase Security Rules are blocking this action. Please go to your Firebase Console > Firestore Database > Rules, and update them to allow access.";
+            }
+            setErrorInfo({ text: "Error joining household.", details: detailMsg });
           }
         } else {
           setErrorInfo({ text: "Invalid code format.", details: "Codes must be exactly 6 characters long." });
@@ -1398,7 +1405,11 @@
           }
           if (onLoginSuccess) onLoginSuccess();
         } catch (error) {
-          setAuthError({ text: "Authentication failed.", details: error.message });
+          let detailMsg = error.message;
+          if (error.message.includes('Missing or insufficient permissions')) {
+            detailMsg = "Permission Denied: Your Firebase Security Rules are blocking this action. Please go to your Firebase Console > Firestore Database > Rules, and update them to allow access.";
+          }
+          setAuthError({ text: "Authentication failed.", details: detailMsg });
         } finally {
           setIsAuthenticating(false);
         }
