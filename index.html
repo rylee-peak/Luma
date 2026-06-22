@@ -42,15 +42,14 @@
     import { 
       Menu, X, Home, Calendar as CalendarIcon, CheckSquare, 
       Image as ImageIcon, Settings, LogOut, Plus, Bell, 
-      Sun, Monitor, UserPlus, Trash2, Clock, Megaphone, Star, Upload, Trophy, Target, Info, RefreshCw,
-      Check, MapPin
+      Sun, Monitor, UserPlus, Trash2, Clock, Megaphone, Star, Upload, Trophy, Target, Info, RefreshCw, Check, MapPin, CloudRain, Cloud
     } from 'lucide-react';
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { 
       getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, 
       createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup,
-      signInAnonymously, signInWithCustomToken
+      signInAnonymously, signInWithCustomToken, setPersistence, browserLocalPersistence
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -105,34 +104,6 @@
       document.body.removeChild(textArea);
     };
 
-    // Reusable Error Alert Component
-    function ErrorAlert({ error }) {
-      const [showDetails, setShowDetails] = useState(false);
-      if (!error) return null;
-      return (
-        <div className="mb-6 bg-red-50 text-red-700 text-sm rounded-xl border border-red-100 overflow-hidden text-left fade-in">
-          <div className="p-3 flex items-start justify-between gap-2">
-            <span className="font-medium">{error.text}</span>
-            {error.details && (
-              <button 
-                type="button" 
-                onClick={(e) => { e.preventDefault(); setShowDetails(!showDetails); }} 
-                className="text-red-500 hover:text-red-800 shrink-0 mt-0.5" 
-                title="View Technical Details"
-              >
-                <Info size={16} />
-              </button>
-            )}
-          </div>
-          {showDetails && error.details && (
-            <div className="p-3 bg-red-100/50 border-t border-red-100 text-xs font-mono break-words text-red-800">
-              {error.details}
-            </div>
-          )}
-        </div>
-      );
-    }
-
     // Global Error Boundary to catch React crashes and prevent blank screens
     class ErrorBoundary extends React.Component {
       constructor(props) {
@@ -173,6 +144,34 @@
       }
     }
 
+    // Reusable Error Alert Component
+    function ErrorAlert({ error }) {
+      const [showDetails, setShowDetails] = useState(false);
+      if (!error) return null;
+      return (
+        <div className="mb-6 bg-red-50 text-red-700 text-sm rounded-xl border border-red-100 overflow-hidden text-left fade-in">
+          <div className="p-3 flex items-start justify-between gap-2">
+            <span className="font-medium">{error.text}</span>
+            {error.details && (
+              <button 
+                type="button" 
+                onClick={(e) => { e.preventDefault(); setShowDetails(!showDetails); }} 
+                className="text-red-500 hover:text-red-800 shrink-0 mt-0.5" 
+                title="View Technical Details"
+              >
+                <Info size={16} />
+              </button>
+            )}
+          </div>
+          {showDetails && error.details && (
+            <div className="p-3 bg-red-100/50 border-t border-red-100 text-xs font-mono break-words text-red-800">
+              {error.details}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // Reusable Modal Component
     function Modal({ isOpen, onClose, title, children }) {
       if (!isOpen) return null;
@@ -208,6 +207,7 @@
       const [chores, setChores] = useState(() => safeGetStorage('luma_chores', []));
       const [announcements, setAnnouncements] = useState(() => safeGetStorage('luma_announcements', []));
       const [familyGoal, setFamilyGoal] = useState(() => safeGetStorage('luma_familyGoal', 500));
+      const [weather, setWeather] = useState(() => safeGetStorage('luma_weather', { temp: 72, condition: 'Sunny' }));
       
       // Photos use Blob URLs which don't survive refresh, so we keep it memory-only for prototype
       const [photos, setPhotos] = useState([]); 
@@ -232,10 +232,6 @@
       const [announcementTitle, setAnnouncementTitle] = useState("");
       const [announcementText, setAnnouncementText] = useState("");
 
-      // Weather & Location States
-      const [zipCode, setZipCode] = useState(() => safeGetStorage('luma_zip', '92551'));
-      const [weather, setWeather] = useState({ temp: '--', condition: 'Loading...', icon: Sun });
-
       useEffect(() => { safeSetStorage('luma_pairedHousehold', pairedHousehold); }, [pairedHousehold]);
       useEffect(() => { safeSetStorage('luma_events', events); }, [events]);
       useEffect(() => { safeSetStorage('luma_chores', chores); }, [chores]);
@@ -257,12 +253,62 @@
         }
       };
 
-      const syncGoogleCalendar = async (currentUser = user) => {
+      const syncGoogleCalendar = async (currentUser = user, isBackgroundLoad = false) => {
         // Only attempt to sync if the user signed in with Google
         const isGoogleAuth = currentUser?.providerData?.some(p => p.providerId === 'google.com');
         if (!isGoogleAuth) return;
 
         setIsSyncing(true);
+
+        const fetchEventsWithToken = async (token) => {
+          const timeMin = new Date().toISOString();
+          const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&maxResults=15&singleEvents=true&orderBy=startTime`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!res.ok) throw new Error("Invalid token");
+          const gcalData = await res.json();
+          
+          if (gcalData.items) {
+            const newEvents = gcalData.items.map(item => {
+              const startObj = item.start.dateTime || item.start.date;
+              const dateObj = new Date(startObj);
+              return {
+                id: item.id,
+                title: item.summary,
+                time: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(/^0+/, ''),
+                date: dateObj.getDate(),
+                category: 'Google Calendar',
+                color: 'bg-[#4285F4]' // Google Blue
+              };
+            });
+            
+            // Keep non-Google events, and replace old Google ones with fresh fetch
+            setEvents(prev => {
+               const nonGoogle = prev.filter(e => e.category !== 'Google Calendar');
+               const combined = [...nonGoogle, ...newEvents];
+               // Remove potential duplicates
+               return combined.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+            });
+          }
+        };
+
+        const cachedToken = safeGetStorage('luma_gcal_token', null);
+        const cachedTime = safeGetStorage('luma_gcal_token_time', 0);
+        // Google tokens expire in exactly 60 minutes. We consider it fresh for 58 minutes.
+        const isTokenFresh = cachedToken && (Date.now() - cachedTime < 3500000); 
+
+        if (isBackgroundLoad) {
+          if (isTokenFresh) {
+            try {
+              await fetchEventsWithToken(cachedToken);
+            } catch (e) {
+              console.log("Cached Google token expired or failed.");
+            }
+          }
+          setIsSyncing(false);
+          return; // NEVER trigger a popup automatically on page load
+        }
+
         try {
           // Initialize the Google Identity Services Token Client
           const client = window.google.accounts.oauth2.initTokenClient({
@@ -277,33 +323,11 @@
               
               try {
                 const token = tokenResponse.access_token;
-                const timeMin = new Date().toISOString();
+                // Cache the token so background loads work silently!
+                safeSetStorage('luma_gcal_token', token);
+                safeSetStorage('luma_gcal_token_time', Date.now());
                 
-                // Fetch events from Google Calendar API
-                const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&maxResults=15&singleEvents=true&orderBy=startTime`, {
-                  headers: { Authorization: `Bearer ${token}` }
-                });
-                
-                const gcalData = await res.json();
-                
-                // Map Google events to Luma format
-                if (gcalData.items) {
-                  const newEvents = gcalData.items.map(item => {
-                    const startObj = item.start.dateTime || item.start.date;
-                    const dateObj = new Date(startObj);
-                    return {
-                      id: item.id,
-                      title: item.summary,
-                      time: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(/^0+/, ''),
-                      date: dateObj.getDate(),
-                      category: 'Google Calendar',
-                      color: 'bg-[#4285F4]' // Google Blue
-                    };
-                  });
-                  
-                  // Keep non-Google events, and replace old Google ones with fresh fetch
-                  setEvents(prev => [...prev.filter(e => e.category !== 'Google Calendar'), ...newEvents]);
-                }
+                await fetchEventsWithToken(token);
               } catch (fetchErr) {
                 console.error("Failed to fetch Google Calendar events:", fetchErr);
               } finally {
@@ -312,8 +336,8 @@
             },
           });
 
-          // Request the token (will show popup if needed, or silently approve if session is valid)
-          client.requestAccessToken();
+          // Request the token (shows popup if needed) passing email as login_hint skips the account chooser!
+          client.requestAccessToken({ login_hint: currentUser?.email });
         } catch (error) {
           console.error("Failed to initialize GIS client:", error);
           setIsSyncing(false);
@@ -324,6 +348,9 @@
       useEffect(() => {
         const initAuth = async () => {
           try {
+            // Force Firebase to remember the session permanently
+            await setPersistence(auth, browserLocalPersistence);
+            
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
               await signInWithCustomToken(auth, __initial_auth_token);
             } else {
@@ -340,7 +367,7 @@
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
           if (currentUser && !currentUser.isAnonymous) {
             try {
-              // 1. Check if user is linked to a household in the cloud (Rule 1 Paths)
+              // 1. Check if user is linked to a household in the cloud
               const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
               const userSnap = await getDoc(userRef);
               
@@ -353,8 +380,8 @@
                   setHousehold(hSnap.data());
                   setMembers(hSnap.data().members || []);
                   
-                  // Trigger Background Google Calendar Sync on successful app load
-                  syncGoogleCalendar(currentUser);
+                  // Trigger Background Google Calendar Sync silently on successful app load
+                  syncGoogleCalendar(currentUser, true);
                   
                 } else {
                   setHousehold(null);
@@ -577,12 +604,12 @@
             </header>
 
             <div className="flex-1 overflow-y-auto p-4 md:p-8 relative">
-              {currentView === 'dashboard' && <DashboardView currentUser={currentUserMember} events={events} chores={chores} setChores={setChores} announcements={announcements} setAnnouncements={setAnnouncements} onAddEvent={() => setIsEventModalOpen(true)} isAdmin={isAdmin} onAddAnnouncement={() => setIsAnnouncementModalOpen(true)} members={members} setMembers={updateHouseholdMembers} isSyncing={isSyncing} onManualSync={() => syncGoogleCalendar(user)} />}
+              {currentView === 'dashboard' && <DashboardView currentUser={currentUserMember} events={events} chores={chores} setChores={setChores} announcements={announcements} setAnnouncements={setAnnouncements} onAddEvent={() => setIsEventModalOpen(true)} isAdmin={isAdmin} onAddAnnouncement={() => setIsAnnouncementModalOpen(true)} members={members} setMembers={updateHouseholdMembers} isSyncing={isSyncing} onManualSync={() => syncGoogleCalendar(user, false)} />}
               {currentView === 'calendar' && <CalendarView events={events} onAddEvent={() => setIsEventModalOpen(true)} />}
               {currentView === 'chores' && <ChoresView chores={chores} setChores={setChores} members={members} setMembers={updateHouseholdMembers} onAddChore={() => setIsChoreModalOpen(true)} isAdmin={isAdmin} />}
               {currentView === 'progress' && <ProgressView members={members} familyGoal={familyGoal} />}
               {currentView === 'photos' && <PhotosView photos={photos} setPhotos={setPhotos} />}
-              {currentView === 'settings' && <SettingsView user={user} household={household} setHousehold={updateHouseholdData} members={members} setMembers={updateHouseholdMembers} isAdmin={isAdmin} zipCode={zipCode} setZipCode={setZipCode} />}
+              {currentView === 'settings' && <SettingsView user={user} household={household} setHousehold={updateHouseholdData} members={members} setMembers={updateHouseholdMembers} isAdmin={isAdmin} weather={weather} setWeather={setWeather} />}
             </div>
           </main>
         </div>
@@ -604,7 +631,6 @@
         try {
           const newHouseholdId = 'house_' + Date.now();
           
-          // CRITICAL FIX: Ensure no fields are undefined before saving to Firestore.
           const userEmail = user.email || '';
           const userName = user.displayName || 'You';
           
@@ -765,17 +791,19 @@
               <h1 className="text-3xl font-bold text-[#0F172A] tracking-tight">
                 Good morning{currentUser?.name ? `, ${currentUser.name}` : ''}.
               </h1>
-              <p className="text-[#64748B] mt-1">Here's what's happening today.</p>
+              <p className="text-[#64748B] mt-1 flex items-center gap-2">
+                Here's what's happening today.
+              </p>
             </div>
             
             <div className="flex items-center gap-3 relative">
-              <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-400 mr-2">
-                 {isSyncing ? (
-                   <><RefreshCw size={14} className="animate-spin text-blue-500" /> Syncing calendar...</>
-                 ) : (
-                   <button onClick={onManualSync} className="hover:text-slate-600 flex items-center gap-1 transition-colors" title="Sync Google Calendar"><RefreshCw size={14} /> Synced</button>
-                 )}
-              </div>
+              <button 
+                 onClick={onManualSync} 
+                 className={`hidden sm:flex bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-full text-sm font-bold items-center gap-2 hover:bg-slate-50 transition-colors ${isSyncing ? 'opacity-50' : ''}`}
+                 disabled={isSyncing}
+              >
+                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} /> {isSyncing ? 'Syncing...' : 'Synced'}
+              </button>
               {isAdmin && (
                 <button onClick={onAddAnnouncement} className="hidden sm:flex bg-orange-100 text-orange-700 px-4 py-2 rounded-full text-sm font-bold items-center gap-2 hover:bg-orange-200 transition-colors">
                   <Megaphone size={16} /> Post Announcement
@@ -1143,7 +1171,7 @@
       );
     }
 
-    function SettingsView({ user, household, setHousehold, members, setMembers, isAdmin, zipCode, setZipCode }) {
+    function SettingsView({ user, household, setHousehold, members, setMembers, isAdmin, weather, setWeather }) {
       const [displays, setDisplays] = useState([]);
       const [showLinkInput, setShowLinkInput] = useState(false);
       const [linkCode, setLinkCode] = useState("");
@@ -1158,15 +1186,10 @@
 
       const [inviteCode, setInviteCode] = useState(household?.inviteCode || "");
       
-      // Integration States
-      const [googleConnected, setGoogleConnected] = useState(user?.providerData?.some(p => p.providerId === 'google.com') || false);
-      const [appleConnected, setAppleConnected] = useState(false);
-      const [outlookConnected, setOutlookConnected] = useState(false);
-
-      // Integration Modals
-      const [showAppleModal, setShowAppleModal] = useState(false);
-      const [showOutlookModal, setShowOutlookModal] = useState(false);
-      const [isAuthenticatingIntegration, setIsAuthenticatingIntegration] = useState(false);
+      const [zipCode, setZipCode] = useState("");
+      const [isWeatherLoading, setIsWeatherLoading] = useState(false);
+      const [mockIntegrationLoading, setMockIntegrationLoading] = useState(null);
+      const [mockIntegrationComplete, setMockIntegrationComplete] = useState(null);
 
       const showMessage = (text, type = 'success') => {
          setMessage({ text, type });
@@ -1212,6 +1235,46 @@
       const saveHousehold = () => {
          setHousehold({ ...household, name: editHouseName });
          showMessage("Household updated!");
+      };
+
+      const handleSaveWeather = async () => {
+        if(!zipCode) return;
+        setIsWeatherLoading(true);
+        try {
+          const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(zipCode)}&count=1&language=en&format=json`);
+          const geoData = await geoRes.json();
+          if (geoData.results && geoData.results.length > 0) {
+             const { latitude, longitude, name } = geoData.results[0];
+             const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&temperature_unit=fahrenheit`);
+             const weatherData = await weatherRes.json();
+             
+             let condition = 'Clear';
+             const code = weatherData.current_weather.weathercode;
+             if (code >= 61 && code <= 65) condition = 'Rain';
+             if (code >= 71 && code <= 75) condition = 'Snow';
+             if (code === 3) condition = 'Cloudy';
+
+             const newWeather = { temp: Math.round(weatherData.current_weather.temperature), condition, location: name };
+             setWeather(newWeather);
+             safeSetStorage('luma_weather', newWeather);
+             showMessage("Location weather updated!");
+          } else {
+             showMessage("Could not find that location.", "error");
+          }
+        } catch (error) {
+           showMessage("Weather service unavailable.", "error");
+        }
+        setIsWeatherLoading(false);
+        setZipCode("");
+      };
+
+      const handleMockIntegration = (provider) => {
+        setMockIntegrationLoading(provider);
+        setTimeout(() => {
+          setMockIntegrationLoading(null);
+          setMockIntegrationComplete(provider);
+          setTimeout(() => setMockIntegrationComplete(null), 3000);
+        }, 1500);
       };
 
       return (
@@ -1372,125 +1435,89 @@
 
               {activeTab === 'integrations' && (
                 <div className="p-8 fade-in">
-                  <div className="flex justify-between items-start mb-6">
-                    <div>
-                      <h2 className="text-xl font-bold mb-1">Integrations</h2>
-                      <p className="text-slate-500 text-sm">Connect third-party services to your family hub.</p>
-                    </div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-bold">Integrations</h2>
+                    <p className="text-slate-500 text-sm">Connect third-party services to Luma.</p>
                   </div>
 
-                  {/* Modals for simulated OAuth connections */}
-                  <Modal isOpen={showAppleModal} onClose={() => setShowAppleModal(false)} title="Connect Apple Calendar">
-                    <div className="space-y-4">
-                      <p className="text-sm text-slate-600">To sync iCloud, please generate an App-Specific Password at appleid.apple.com.</p>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Apple ID</label>
-                        <input type="email" placeholder="email@icloud.com" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+                  <div className="space-y-4">
+                    
+                    {/* Location Integration */}
+                    <div className="border border-slate-200 rounded-2xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600 shrink-0"><MapPin size={24} /></div>
+                        <div>
+                          <h3 className="font-bold">Weather & Location</h3>
+                          <p className="text-sm text-slate-500">Enable local weather on your display.</p>
+                          {weather && weather.location && <p className="text-xs text-green-600 font-medium mt-1">Currently showing: {weather.location} ({weather.temp}°)</p>}
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">App-Specific Password</label>
-                        <input type="password" placeholder="xxxx-xxxx-xxxx-xxxx" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+                      <div className="flex items-center gap-2 w-full md:w-auto">
+                        <input 
+                          type="text" 
+                          placeholder="Enter Zip or City" 
+                          value={zipCode} 
+                          onChange={(e) => setZipCode(e.target.value)} 
+                          className="w-full md:w-32 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button onClick={handleSaveWeather} disabled={isWeatherLoading} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50 shrink-0 transition-colors">
+                          {isWeatherLoading ? '...' : 'Save'}
+                        </button>
                       </div>
-                      <button onClick={() => {
-                        setIsAuthenticatingIntegration(true);
-                        setTimeout(() => { setIsAuthenticatingIntegration(false); setShowAppleModal(false); setAppleConnected(true); showMessage("Apple Calendar Linked"); }, 1500);
-                      }} disabled={isAuthenticatingIntegration} className="w-full py-3 mt-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-black transition-colors disabled:opacity-50">
-                        {isAuthenticatingIntegration ? 'Verifying...' : 'Sign In securely'}
+                    </div>
+
+                    {/* Google Calendar Integration */}
+                    <div className="border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-[#f8f9fa] border border-[#dadce0] rounded-xl flex items-center justify-center shrink-0">
+                          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-800">Google Calendar</h3>
+                          <p className="text-sm text-slate-500">Sync your primary Google Calendar.</p>
+                        </div>
+                      </div>
+                      {user?.providerData?.some(p => p.providerId === 'google.com') ? (
+                        <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">
+                          <Check size={16} /> <span className="text-sm font-bold">Connected</span>
+                        </div>
+                      ) : (
+                        <button className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium cursor-not-allowed">
+                          Must sign in with Google
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Apple Calendar Integration (Mock) */}
+                    <div className="border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center text-white shrink-0">
+                          <svg className="w-6 h-6 fill-current" viewBox="0 0 384 512"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"></path></svg>
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-800">Apple Calendar</h3>
+                          <p className="text-sm text-slate-500">Sync events from iCloud.</p>
+                        </div>
+                      </div>
+                      <button onClick={() => handleMockIntegration('apple')} className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors w-full sm:w-auto">
+                         {mockIntegrationLoading === 'apple' ? 'Connecting...' : (mockIntegrationComplete === 'apple' ? 'Connected!' : 'Connect')}
                       </button>
                     </div>
-                  </Modal>
 
-                  <Modal isOpen={showOutlookModal} onClose={() => setShowOutlookModal(false)} title="Microsoft Sign In">
-                    <div className="space-y-6 text-center py-4">
-                      <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold">M</div>
-                      <p className="text-slate-600">You will be securely redirected to Microsoft.com to authorize Luma to view your calendar events.</p>
-                      <button onClick={() => {
-                        setIsAuthenticatingIntegration(true);
-                        setTimeout(() => { setIsAuthenticatingIntegration(false); setShowOutlookModal(false); setOutlookConnected(true); showMessage("Outlook Connected"); }, 1500);
-                      }} disabled={isAuthenticatingIntegration} className="w-full py-3 bg-[#0078D4] text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">
-                        {isAuthenticatingIntegration ? 'Redirecting...' : 'Continue to Microsoft'}
+                    {/* Microsoft Outlook Integration (Mock) */}
+                    <div className="border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-[#0078D4] rounded-xl flex items-center justify-center text-white shrink-0 font-bold text-xl">
+                          M
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-800">Outlook / Microsoft 365</h3>
+                          <p className="text-sm text-slate-500">Sync your work or school calendar.</p>
+                        </div>
+                      </div>
+                      <button onClick={() => handleMockIntegration('microsoft')} className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors w-full sm:w-auto">
+                        {mockIntegrationLoading === 'microsoft' ? 'Connecting...' : (mockIntegrationComplete === 'microsoft' ? 'Connected!' : 'Connect')}
                       </button>
-                    </div>
-                  </Modal>
-
-                  <div className="space-y-8">
-                    {/* Calendars Section */}
-                    <div>
-                      <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><CalendarIcon size={18}/> Connected Calendars</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        
-                        {/* Google Calendar */}
-                        <div className={`p-4 border rounded-xl flex items-center justify-between shadow-sm transition-all ${googleConnected ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200 bg-white hover:border-blue-200'}`}>
-                          <div className="flex items-center gap-3">
-                             <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-slate-100 shadow-sm">
-                               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                             </div>
-                             <div>
-                               <p className="font-bold text-sm">Google Calendar</p>
-                               <p className={`text-xs font-medium flex items-center gap-1 ${googleConnected ? 'text-green-600' : 'text-slate-400'}`}>
-                                  {googleConnected ? <><Check size={12}/> Connected via Auth</> : 'Not connected'}
-                               </p>
-                             </div>
-                          </div>
-                          {googleConnected ? (
-                            <button onClick={() => setGoogleConnected(false)} className="text-slate-400 hover:text-red-500 text-sm font-medium">Disconnect</button>
-                          ) : (
-                            <button onClick={() => {setGoogleConnected(true); showMessage("Google Calendar Synced!");}} className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Connect</button>
-                          )}
-                        </div>
-
-                        {/* Apple Calendar */}
-                        <div className={`p-4 border rounded-xl flex items-center justify-between shadow-sm transition-all ${appleConnected ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200 bg-white hover:border-blue-200'}`}>
-                          <div className="flex items-center gap-3">
-                             <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-slate-100 shadow-sm text-slate-800">
-                                <svg width="20" height="20" viewBox="0 0 170 170"><path fill="currentColor" d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.74 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.92.21-9.84-1.96-14.74-6.53-3.13-2.73-7.1-7.43-11.92-14.09-6.23-8.65-11.84-19.2-16.85-31.62-5.01-12.43-7.51-24.31-7.51-35.65 0-13.41 3.23-24.61 9.69-33.6 4.31-5.91 9.69-10.42 16.14-13.56 6.45-3.13 13.06-4.74 19.83-4.84 4.02 0 9.04 1.15 15.06 3.44 6.03 2.3 10.15 3.46 12.35 3.46 1.83 0 6.13-1.22 12.89-3.66 6.75-2.44 12.06-3.56 15.93-3.35 15.11.74 26.54 6.36 34.28 16.89-13.52 7.82-19.86 19.38-19.03 34.69.8 15.34 8.78 27.27 23.95 35.81-2.47 5.76-5.04 11.41-7.69 16.96zm-24.96-103.88c-3.13 3.8-7.39 6.08-12.78 6.81-1.01-9.96 3.01-18.9 12.03-26.83 2.92-2.53 6.42-4.43 10.49-5.71 4.07-1.28 8.01-1.87 11.83-1.78-.71 9.94-4.82 18.67-12.3 26.17-2.6 2.5-5.69 4.38-9.27 5.66z"/></svg>
-                             </div>
-                             <div>
-                               <p className="font-bold text-sm">Apple Calendar</p>
-                               <p className={`text-xs font-medium flex items-center gap-1 ${appleConnected ? 'text-green-600' : 'text-slate-400'}`}>
-                                  {appleConnected ? <><Check size={12}/> Connected</> : 'Not connected'}
-                               </p>
-                             </div>
-                          </div>
-                          {appleConnected ? (
-                            <button onClick={() => setAppleConnected(false)} className="text-slate-400 hover:text-red-500 text-sm font-medium">Disconnect</button>
-                          ) : (
-                            <button onClick={() => setShowAppleModal(true)} className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Connect</button>
-                          )}
-                        </div>
-                        
-                        {/* Outlook */}
-                        <div className={`p-4 border rounded-xl flex items-center justify-between shadow-sm transition-all ${outlookConnected ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200 bg-white hover:border-blue-200'}`}>
-                          <div className="flex items-center gap-3">
-                             <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-slate-100 shadow-sm">
-                                <span className="text-2xl text-blue-600 font-bold">O</span>
-                             </div>
-                             <div>
-                               <p className="font-bold text-sm">Outlook / O365</p>
-                               <p className={`text-xs font-medium flex items-center gap-1 ${outlookConnected ? 'text-green-600' : 'text-slate-400'}`}>
-                                  {outlookConnected ? <><Check size={12}/> Connected</> : 'Not connected'}
-                               </p>
-                             </div>
-                          </div>
-                          {outlookConnected ? (
-                            <button onClick={() => setOutlookConnected(false)} className="text-slate-400 hover:text-red-500 text-sm font-medium">Disconnect</button>
-                          ) : (
-                            <button onClick={() => setShowOutlookModal(true)} className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Connect</button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Location & Weather Section */}
-                    <div>
-                      <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><MapPin size={18}/> Weather & Location</h3>
-                      <div className="p-5 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-3">
-                        <p className="text-sm text-slate-500">Set your household location to display accurate, local weather on the Dashboard and Kiosk Display.</p>
-                        <div className="flex gap-3 max-w-sm mt-2">
-                          <input type="text" placeholder="Zip Code or City" value={zipCode} onChange={(e) => setZipCode(e.target.value)} className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"/>
-                          <button onClick={() => showMessage("Location Saved!")} className="bg-slate-800 text-white px-5 py-2 rounded-lg font-bold hover:bg-slate-900 transition-colors">Save</button>
-                        </div>
-                      </div>
                     </div>
 
                   </div>
@@ -1523,7 +1550,8 @@
             <div>
               <h2 className="text-3xl font-bold text-slate-500">{household?.name || 'Luma'}</h2>
               <p className="text-2xl text-blue-600 flex items-center gap-2 mt-2 font-medium">
-                 {weather && weather.icon && <weather.icon size={28} />} {weather?.temp}° {weather?.condition}
+                 {weather?.condition === 'Rain' ? <CloudRain size={28} /> : (weather?.condition === 'Cloudy' ? <Cloud size={28} /> : <Sun size={28} />)} 
+                 {weather?.temp || '72'}° {weather?.condition || 'Sunny'}
               </p>
             </div>
             <div className="text-right">
@@ -1615,7 +1643,6 @@
     function AuthScreen({ onPairDisplay, onLoginSuccess }) {
       const [isPairingMode, setIsPairingMode] = useState(false);
       const [pairingCode, setPairingCode] = useState("");
-      const [pairingError, setPairingError] = useState(null);
       const [isRegistering, setIsRegistering] = useState(false);
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
@@ -1627,25 +1654,16 @@
         if (isPairingMode) {
           const code = Math.random().toString(36).substring(2, 8).toUpperCase();
           setPairingCode(code);
-          setPairingError(null);
           
           const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pairing_codes', code);
-          
-          setDoc(docRef, { status: 'waiting', createdAt: serverTimestamp() }).catch(err => {
-             console.error(err);
-             setPairingError({ text: "Failed to generate pairing code. Please check your internet or Firebase Rules.", details: err.message });
-          });
+          setDoc(docRef, { status: 'waiting', createdAt: serverTimestamp() }).catch(console.error);
           
           unsub = onSnapshot(docRef, (snap) => {
              if (snap.exists() && snap.data().status === 'linked') {
                  onPairDisplay(snap.data().household);
-                 // Cleanup the code after successful link
                  deleteDoc(docRef).catch(console.error);
              }
-          }, (err) => {
-             console.error(err);
-             setPairingError({ text: "Lost connection to the pairing server.", details: err.message });
-          });
+          }, (err) => console.error(err));
         }
         return () => unsub();
       }, [isPairingMode, onPairDisplay]);
@@ -1656,7 +1674,15 @@
         provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
         provider.addScope('https://www.googleapis.com/auth/calendar.events');
         try {
-          await signInWithPopup(auth, provider);
+          const result = await signInWithPopup(auth, provider);
+          
+          // Silently capture the calendar token during login!
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          if (credential && credential.accessToken) {
+             safeSetStorage('luma_gcal_token', credential.accessToken);
+             safeSetStorage('luma_gcal_token_time', Date.now());
+          }
+
           if (onLoginSuccess) onLoginSuccess();
         } catch (error) {
           setAuthError({ text: "Google Sign-In failed.", details: error.message });
@@ -1695,15 +1721,12 @@
             </div>
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
               <div className="bg-white py-12 px-4 shadow-sm sm:rounded-3xl sm:px-10 border border-slate-200 text-center relative overflow-hidden">
-                 
-                 <ErrorAlert error={pairingError} />
-
                  <div className="text-5xl sm:text-6xl font-mono tracking-[0.15em] font-bold text-[#2563EB] mb-8 select-all">{pairingCode || "------"}</div>
                  <div className="flex items-center justify-center gap-3 text-slate-500 mb-8">
                    <div className="w-5 h-5 border-2 border-slate-300 border-t-[#2563EB] rounded-full animate-spin"></div>
                    <span className="font-medium">Waiting for connection...</span>
                  </div>
-                 <button onClick={() => { setIsPairingMode(false); setPairingCode(""); setPairingError(null); }} className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
+                 <button onClick={() => { setIsPairingMode(false); setPairingCode(""); }} className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
               </div>
             </div>
           </div>
