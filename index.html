@@ -120,6 +120,36 @@
       }
     };
 
+    // Time Format Helpers
+    const formatTimeDisplay = (timeStr) => {
+      if (!timeStr) return '';
+      // If it already contains AM/PM, it's formatted.
+      if (timeStr.includes('AM') || timeStr.includes('PM')) return timeStr;
+      
+      const [hours, minutes] = timeStr.split(':');
+      const h = parseInt(hours, 10);
+      if (isNaN(h)) return timeStr;
+      
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const formattedHour = h % 12 || 12;
+      return `${formattedHour}:${minutes} ${ampm}`;
+    };
+
+    const parseTimeToMinutes = (t) => {
+      if (!t) return 0;
+      if (t.includes('AM') || t.includes('PM')) {
+         const [timePart, ampm] = t.split(' ');
+         let [h, m] = timePart.split(':');
+         h = parseInt(h, 10);
+         m = parseInt(m, 10);
+         if (ampm === 'PM' && h !== 12) h += 12;
+         if (ampm === 'AM' && h === 12) h = 0;
+         return h * 60 + m;
+      }
+      const [h, m] = t.split(':');
+      return parseInt(h, 10) * 60 + parseInt(m, 10);
+    };
+
     // Reusable Error Alert Component
     function ErrorAlert({ error }) {
       const [showDetails, setShowDetails] = useState(false);
@@ -286,10 +316,13 @@
               const dateObj = new Date(startObj);
               const dateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`;
               
+              const h24 = String(dateObj.getHours()).padStart(2, '0');
+              const m24 = String(dateObj.getMinutes()).padStart(2, '0');
+              
               return {
                 id: item.id,
                 title: item.summary,
-                time: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(/^0+/, ''),
+                time: `${h24}:${m24}`, // Always store raw HH:mm for sorting
                 date: dateStr,
                 category: 'Google Calendar',
                 color: 'bg-[#4285F4]', // Google Blue
@@ -416,7 +449,7 @@
         setEvents([...events, { 
           id: Date.now(), 
           title: eventTitle, 
-          time: eventTime, 
+          time: eventTime, // Save raw HH:mm format
           date: eventDate, 
           category: eventCategory, 
           color: getCategoryColor(eventCategory),
@@ -478,7 +511,6 @@
           
           {isSidebarOpen && <div className="fixed inset-0 bg-black/20 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
           
-          {}
           <Modal isOpen={isEventModalOpen} onClose={() => setIsEventModalOpen(false)} title="New Event">
             <form onSubmit={handleAddEvent} className="space-y-4">
               <div>
@@ -541,7 +573,7 @@
                     <div>
                       <h2 className="text-2xl font-bold text-slate-900 leading-tight">{selectedEvent.title}</h2>
                       <div className="flex items-center gap-3 text-slate-600 mt-2 font-medium">
-                        <Clock size={16} /> <span>{new Date(selectedEvent.date + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} at {selectedEvent.time}</span>
+                        <Clock size={16} /> <span>{new Date(selectedEvent.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at {formatTimeDisplay(selectedEvent.time)}</span>
                       </div>
                       <div className="inline-block mt-3 px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold border border-slate-200">
                         {selectedEvent.category}
@@ -597,7 +629,6 @@
              )}
           </Modal>
 
-          {}
           <Modal isOpen={isChoreModalOpen} onClose={() => setIsChoreModalOpen(false)} title="Assign Chore">
             <form onSubmit={handleAddChore} className="space-y-4">
               <div>
@@ -635,7 +666,6 @@
             </form>
           </Modal>
 
-          {}
           <aside className={`
             fixed lg:static inset-y-0 left-0 z-50
             w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out
@@ -703,7 +733,7 @@
     }
 
     function OnboardingScreen({ user, setHousehold, members, setMembers }) {
-      const [view, setView] = useState('select'); // select, create, join
+      const [view, setView] = useState('select');
       const [houseName, setHouseName] = useState("");
       const [inviteCode, setInviteCode] = useState("");
       const [isLoading, setIsLoading] = useState(false);
@@ -854,7 +884,7 @@
       };
 
       const todayStr = getTodayDateString();
-      const todayEvents = events.filter(e => e.date === todayStr);
+      const todayEvents = events.filter(e => e.date === todayStr).sort((a,b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time));
       const activeAnnouncement = announcements && announcements.length > 0 ? announcements[0] : null;
 
       return (
@@ -921,7 +951,7 @@
                           {event.location && <span className="flex items-center gap-1 text-slate-400"><MapPin size={12}/></span>}
                         </p>
                       </div>
-                      <div className="font-medium text-slate-600 bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-sm">{event.time}</div>
+                      <div className="font-medium text-slate-600 bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-sm">{formatTimeDisplay(event.time)}</div>
                     </div>
                   ))
                 ) : (
@@ -966,7 +996,6 @@
 
     function CalendarView({ events, onAddEvent, onViewEvent }) {
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      
       const [currentMonth, setCurrentMonth] = useState(new Date());
 
       const year = currentMonth.getFullYear();
@@ -999,7 +1028,7 @@
               <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
               <div className="flex items-center gap-4 mt-2">
                 <p className="text-slate-500 font-medium text-lg">
-                  {currentMonth.toLocaleDateString('default', { month: 'long', year: 'numeric' })}
+                  {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                 </p>
                 <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
                   <button onClick={handlePrevMonth} className="px-3 py-1 hover:bg-slate-50 border-r border-slate-200">&lt;</button>
@@ -1024,7 +1053,7 @@
                 const isCurrentMonth = dateNum !== null;
                 const dateStr = isCurrentMonth ? `${year}-${String(month+1).padStart(2,'0')}-${String(dateNum).padStart(2,'0')}` : null;
                 const isToday = dateStr === todayStr; 
-                const dayEvents = isCurrentMonth ? events.filter(e => e.date === dateStr).sort((a,b) => a.time.localeCompare(b.time)) : [];
+                const dayEvents = isCurrentMonth ? events.filter(e => e.date === dateStr).sort((a,b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time)) : [];
 
                 return (
                   <div key={idx} onClick={() => isCurrentMonth && onAddEvent(dateStr)} className={`p-2 min-h-[100px] bg-white transition-colors relative group flex flex-col ${isCurrentMonth ? 'cursor-pointer hover:bg-slate-50' : 'bg-slate-50 opacity-40 cursor-not-allowed'}`}>
@@ -1038,12 +1067,15 @@
                     </div>
                     
                     <div className="flex-1 mt-1 space-y-1 overflow-y-auto">
-                      {isCurrentMonth && dayEvents.map(ev => (
-                        <div key={ev.id} onClick={(e) => { e.stopPropagation(); onViewEvent(ev); }} className="px-2 py-1 text-xs font-bold text-white rounded-md truncate cursor-pointer hover:opacity-90 shadow-sm flex items-center gap-1" style={{backgroundColor: ev.category === 'Birthday' ? '#ec4899' : (ev.color.includes('orange') ? '#f97316' : (ev.color.includes('yellow') ? '#eab308' : (ev.color.includes('red') ? '#ef4444' : '#3b82f6'))) }}>
-                          {ev.category === 'Birthday' ? <Gift size={10}/> : null}
-                          {ev.time.split(':')[0]}{ev.time.includes('PM')?'p':'a'} {ev.title}
-                        </div>
-                      ))}
+                      {isCurrentMonth && dayEvents.map(ev => {
+                        const displayTime = formatTimeDisplay(ev.time);
+                        return (
+                          <div key={ev.id} onClick={(e) => { e.stopPropagation(); onViewEvent(ev); }} className="px-2 py-1 text-xs font-bold text-white rounded-md truncate cursor-pointer hover:opacity-90 shadow-sm flex items-center gap-1" style={{backgroundColor: ev.category === 'Birthday' ? '#ec4899' : (ev.color.includes('orange') ? '#f97316' : (ev.color.includes('yellow') ? '#eab308' : (ev.color.includes('red') ? '#ef4444' : '#3b82f6'))) }}>
+                            {ev.category === 'Birthday' ? <Gift size={10}/> : null}
+                            {displayTime.split(':')[0]}{displayTime.includes('PM')?'p':'a'} {ev.title}
+                          </div>
+                        )
+                      })}
                     </div>
 
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -1423,7 +1455,7 @@
 
       const activeAnnouncement = announcements && announcements.length > 0 ? announcements[0] : null;
       const todayStr = getTodayDateString();
-      const todayEvents = events ? events.filter(e => e.date === todayStr).sort((a,b) => a.time.localeCompare(b.time)) : [];
+      const todayEvents = events ? events.filter(e => e.date === todayStr).sort((a,b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time)) : [];
 
       return (
         <div className="fixed inset-0 bg-[#F8FAFC] text-slate-800 z-[100] flex flex-col p-8 overflow-hidden select-none fade-in">
@@ -1434,8 +1466,8 @@
               <p className="text-2xl text-blue-600 flex items-center gap-2 mt-2 font-medium"><Sun size={28} /> {weather?.temp || '72'}° {weather?.condition || 'Sunny'}</p>
             </div>
             <div className="text-right">
-              <h1 className="text-8xl font-black tracking-tighter text-slate-900 drop-shadow-sm">{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</h1>
-              <p className="text-3xl text-slate-500 mt-3 font-bold">{time.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+              <h1 className="text-8xl font-black tracking-tighter text-slate-900 drop-shadow-sm">{time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</h1>
+              <p className="text-3xl text-slate-500 mt-3 font-bold">{time.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
             </div>
           </header>
           <div className="grid grid-cols-3 gap-8 flex-1">
@@ -1471,28 +1503,31 @@
                <h3 className="text-3xl font-bold mb-10 flex items-center gap-4 text-slate-800"><CalendarIcon className="text-orange-500" size={36} /> Today's Schedule</h3>
               <div className="space-y-6">
                  {todayEvents.length > 0 ? (
-                   todayEvents.map(event => (
-                    <div key={event.id} className="flex items-center gap-8 bg-slate-50 border border-slate-100 p-8 rounded-3xl relative overflow-hidden">
-                      <div className={`absolute left-0 top-0 bottom-0 w-3 ${event.category==='Birthday'?'bg-pink-500':event.color}`}></div>
-                      <div className="text-4xl font-black text-slate-800 w-40 pl-4">{event.time.split(':')[0]}{event.time.includes('PM')?'p':'a'}</div>
-                      <div className="flex-1">
-                        <h4 className="text-3xl font-bold text-slate-800 mb-2">{event.title}</h4>
-                        <div className="flex items-center gap-4 text-2xl text-slate-500 font-medium">
-                          {event.category === 'Birthday' && <span className="flex items-center gap-1 text-pink-500"><Gift size={24}/></span>}
-                          {event.category}
-                          {event.location && <span className="flex items-center gap-2 ml-4 border-l pl-4 border-slate-300"><MapPin size={24}/> {event.location}</span>}
+                   todayEvents.map(event => {
+                    const displayTime = formatTimeDisplay(event.time);
+                    return (
+                      <div key={event.id} className="flex items-center gap-8 bg-slate-50 border border-slate-100 p-8 rounded-3xl relative overflow-hidden">
+                        <div className={`absolute left-0 top-0 bottom-0 w-3 ${event.category==='Birthday'?'bg-pink-500':event.color}`}></div>
+                        <div className="text-4xl font-black text-slate-800 w-40 pl-4">{displayTime.split(':')[0]}{displayTime.includes('PM')?'p':'a'}</div>
+                        <div className="flex-1">
+                          <h4 className="text-3xl font-bold text-slate-800 mb-2">{event.title}</h4>
+                          <div className="flex items-center gap-4 text-2xl text-slate-500 font-medium">
+                            {event.category === 'Birthday' && <span className="flex items-center gap-1 text-pink-500"><Gift size={24}/></span>}
+                            {event.category}
+                            {event.location && <span className="flex items-center gap-2 ml-4 border-l pl-4 border-slate-300"><MapPin size={24}/> {event.location}</span>}
+                          </div>
                         </div>
+                        {event.members && event.members.length > 0 && (
+                          <div className="flex flex-col gap-2">
+                             {event.members.map(mid => {
+                               const m = members?.find(x => x.id === mid);
+                               return m ? <div key={m.id} className="w-12 h-12 bg-slate-200 text-slate-600 rounded-full flex items-center justify-center font-bold text-xl">{m.name.charAt(0)}</div> : null;
+                             })}
+                          </div>
+                        )}
                       </div>
-                      {event.members && event.members.length > 0 && (
-                        <div className="flex flex-col gap-2">
-                           {event.members.map(mid => {
-                             const m = members?.find(x => x.id === mid);
-                             return m ? <div key={m.id} className="w-12 h-12 bg-slate-200 text-slate-600 rounded-full flex items-center justify-center font-bold text-xl">{m.name.charAt(0)}</div> : null;
-                           })}
-                        </div>
-                      )}
-                    </div>
-                  ))
+                    )
+                  })
                 ) : <div className="h-full flex flex-col items-center justify-center text-slate-400 mt-32"><CalendarIcon size={80} className="mb-6 opacity-20" /><p className="text-3xl font-medium text-slate-500">Clear calendar ahead.</p><p className="text-xl mt-3">Enjoy your day!</p></div>}
               </div>
             </div>
