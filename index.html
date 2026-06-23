@@ -1072,7 +1072,7 @@
                         return (
                           <div key={ev.id} onClick={(e) => { e.stopPropagation(); onViewEvent(ev); }} className="px-2 py-1 text-xs font-bold text-white rounded-md truncate cursor-pointer hover:opacity-90 shadow-sm flex items-center gap-1" style={{backgroundColor: ev.category === 'Birthday' ? '#ec4899' : (ev.color.includes('orange') ? '#f97316' : (ev.color.includes('yellow') ? '#eab308' : (ev.color.includes('red') ? '#ef4444' : '#3b82f6'))) }}>
                             {ev.category === 'Birthday' ? <Gift size={10}/> : null}
-                            {displayTime.split(':')[0]}{displayTime.includes('PM')?'p':'a'} {ev.title}
+                            {displayTime} {ev.title}
                           </div>
                         )
                       })}
@@ -1508,7 +1508,7 @@
                     return (
                       <div key={event.id} className="flex items-center gap-8 bg-slate-50 border border-slate-100 p-8 rounded-3xl relative overflow-hidden">
                         <div className={`absolute left-0 top-0 bottom-0 w-3 ${event.category==='Birthday'?'bg-pink-500':event.color}`}></div>
-                        <div className="text-4xl font-black text-slate-800 w-40 pl-4">{displayTime.split(':')[0]}{displayTime.includes('PM')?'p':'a'}</div>
+                        <div className="text-4xl font-black text-slate-800 min-w-[180px] pl-4 whitespace-nowrap">{displayTime}</div>
                         <div className="flex-1">
                           <h4 className="text-3xl font-bold text-slate-800 mb-2">{event.title}</h4>
                           <div className="flex items-center gap-4 text-2xl text-slate-500 font-medium">
