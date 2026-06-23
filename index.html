@@ -1619,7 +1619,7 @@
                  {members.map(m => (
                    <div key={m.id} className="flex items-center gap-3">
                      <div className="w-6 h-6 rounded-full shadow-sm border-2 border-slate-100" style={{backgroundColor: m.color || '#3B82F6'}}></div>
-                     <span className="font-bold text-slate-700 text-xl">{m.name}</span>
+                     <span className="font-bold text-slate-700 text-xl">{m.name.split(' ')[0]}</span>
                    </div>
                  ))}
                </div>
