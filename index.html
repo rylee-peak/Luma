@@ -55,7 +55,6 @@
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-    // Firebase Config
     const defaultFirebaseConfig = {
       apiKey: "AIzaSyDJ7p0VmrQXpzqOjXPAFk-g7jm4VylcsEQ",
       authDomain: "luma-ab930.firebaseapp.com",
@@ -79,7 +78,6 @@
     const db = getFirestore(app);
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'luma-default';
 
-    // --- HELPERS ---
     const PROFILE_COLORS = [
       '#3B82F6', // Blue
       '#EF4444', // Red
@@ -136,7 +134,6 @@
     // Time Format Helpers
     const formatTimeDisplay = (timeStr) => {
       if (!timeStr) return '';
-      // If it already contains AM/PM, it's formatted.
       if (timeStr.includes('AM') || timeStr.includes('PM')) return timeStr;
       
       const [hours, minutes] = timeStr.split(':');
@@ -163,22 +160,19 @@
       return parseInt(h, 10) * 60 + parseInt(m, 10);
     };
 
-    // Dynamic Color Generators
     const getEventBackgroundStyle = (event, members) => {
-       if (event.category === 'Google Calendar') return { background: '#4285F4' }; // Keep Google default
-       
-       if (!event.members || event.members.length === 0) return { background: '#94A3B8' }; // Default Grey
+       if (event.category === 'Google Calendar') return { background: '#4285F4' }; 
+       if (!event.members || event.members.length === 0) return { background: '#94A3B8' }; 
        
        const memberColors = event.members.map(memberId => {
           const m = members.find(x => x.id === memberId);
-          return m?.color || '#3B82F6'; // Default to blue if no color assigned
+          return m?.color || '#3B82F6'; 
        });
 
        if (memberColors.length === 1) {
            return { background: memberColors[0] };
        }
        
-       // Create a gradient for multiple members
        const stops = memberColors.join(', ');
        return { background: `linear-gradient(to right, ${stops})` };
     };
@@ -191,7 +185,6 @@
        return { borderColor: m?.color || '#3B82F6' };
     };
 
-    // Reusable Error Alert Component
     function ErrorAlert({ error }) {
       const [showDetails, setShowDetails] = useState(false);
       if (!error) return null;
@@ -219,7 +212,6 @@
       );
     }
 
-    // Global Error Boundary
     class ErrorBoundary extends React.Component {
       constructor(props) {
         super(props);
@@ -282,7 +274,6 @@
       const [uiLoggedIn, setUiLoggedIn] = useState(() => safeGetStorage('luma_ui_logged_in', false));
       const [isSyncing, setIsSyncing] = useState(false);
       
-      // Core Data States
       const [household, setHousehold] = useState(null);
       const [pairedHousehold, setPairedHousehold] = useState(() => safeGetStorage('luma_pairedHousehold', null));
       const [members, setMembers] = useState([]);
@@ -294,13 +285,11 @@
       const [photos, setPhotos] = useState([]); 
       const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-      // Modal States
       const [isEventModalOpen, setIsEventModalOpen] = useState(false);
       const [selectedEvent, setSelectedEvent] = useState(null); 
       const [isChoreModalOpen, setIsChoreModalOpen] = useState(false);
       const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
 
-      // Event Form States
       const [eventTitle, setEventTitle] = useState("");
       const [eventTime, setEventTime] = useState("");
       const [eventDate, setEventDate] = useState(getTodayDateString());
@@ -322,7 +311,6 @@
       useEffect(() => { safeSetStorage('luma_announcements', announcements); }, [announcements]);
       useEffect(() => { safeSetStorage('luma_familyGoal', familyGoal); }, [familyGoal]);
 
-      // Cloud Sync Wrappers
       const updateHouseholdMembers = async (newMembers) => {
         setMembers(newMembers);
         if (household?.id) {
@@ -363,7 +351,7 @@
               return {
                 id: item.id,
                 title: item.summary,
-                time: `${h24}:${m24}`, // Raw HH:mm
+                time: `${h24}:${m24}`,
                 date: dateStr,
                 category: 'Google Calendar',
                 location: item.location || '',
@@ -564,15 +552,14 @@
                 <input required value={eventTitle} onChange={e=>setEventTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g., Soccer Practice" />
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
-                  <input type="date" required value={eventDate} onChange={e=>setEventDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Time</label>
-                  <input type="time" required value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
+                <input type="date" required value={eventDate} onChange={e=>setEventDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Time</label>
+                <input type="time" required value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
               </div>
               
               <div>
@@ -686,18 +673,17 @@
                 <input required value={choreTitle} onChange={e=>setChoreTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Unload the dishwasher" />
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Points</label>
-                  <input type="number" min="1" required value={chorePoints} onChange={e=>setChorePoints(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="10" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Assignee</label>
-                  <select required value={choreAssignee} onChange={e=>setChoreAssignee(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="" disabled>Select member</option>
-                    {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Points</label>
+                <input type="number" min="1" required value={chorePoints} onChange={e=>setChorePoints(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="10" />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Assignee</label>
+                <select required value={choreAssignee} onChange={e=>setChoreAssignee(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+                  <option value="" disabled>Select member</option>
+                  {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
               </div>
               
               <button type="submit" className="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors">Assign Chore</button>
@@ -1344,7 +1330,6 @@
       const [zipCode, setZipCode] = useState("");
       const [isWeatherLoading, setIsWeatherLoading] = useState(false);
       
-      // Color Picker State
       const [showColorPickerFor, setShowColorPickerFor] = useState(null);
 
       const showMessage = (text, type = 'success') => { setMessage({ text, type }); setTimeout(() => setMessage({ text: "", type: "success" }), 3000); };
@@ -1630,7 +1615,6 @@
             </div>
           </div>
 
-          {/* FAMILY KEY LEGEND */}
           {members && members.length > 0 && (
             <div className="mt-6 flex justify-center gap-8 items-center bg-white py-4 px-10 rounded-full shadow-sm border border-slate-200 mx-auto z-10 relative">
                <span className="text-sm font-bold text-slate-400 uppercase tracking-widest mr-2 flex items-center gap-2">
