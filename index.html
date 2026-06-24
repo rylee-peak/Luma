@@ -256,18 +256,18 @@
       }
     }
 
-    function Modal({ isOpen, onClose, title, children }) {
+    function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-xl' }) {
       if (!isOpen) return null;
       return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[150] flex items-center justify-center p-4 fade-in" onClick={onClose}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <div className={`bg-white rounded-3xl shadow-2xl w-full ${maxWidth} overflow-hidden flex flex-col max-h-[90vh]`} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-6 border-b border-slate-100 shrink-0">
               <h3 className="font-bold text-xl">{title}</h3>
               <button onClick={onClose} className="text-slate-400 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
                 <X size={20}/>
               </button>
             </div>
-            <div className="p-6 overflow-y-auto">
+            <div className="p-6 overflow-y-auto overflow-x-hidden">
               {children}
             </div>
           </div>
@@ -557,21 +557,22 @@
           
           {isSidebarOpen && <div className="fixed inset-0 bg-black/20 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
           
-          <Modal isOpen={isEventModalOpen} onClose={() => setIsEventModalOpen(false)} title="New Event">
+          <Modal isOpen={isEventModalOpen} onClose={() => setIsEventModalOpen(false)} title="New Event" maxWidth="max-w-xl">
             <form onSubmit={handleAddEvent} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Event Title</label>
                 <input required value={eventTitle} onChange={e=>setEventTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g., Soccer Practice" />
               </div>
               
-              {/* Stacked vertically on all screens so desktop native pickers don't overflow */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
-                <input type="date" required value={eventDate} onChange={e=>setEventDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Time</label>
-                <input type="time" required value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
+                  <input type="date" required value={eventDate} onChange={e=>setEventDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Time</label>
+                  <input type="time" required value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
               </div>
               
               <div>
@@ -614,7 +615,7 @@
             </form>
           </Modal>
 
-          <Modal isOpen={!!selectedEvent} onClose={() => setSelectedEvent(null)} title="Event Details">
+          <Modal isOpen={!!selectedEvent} onClose={() => setSelectedEvent(null)} title="Event Details" maxWidth="max-w-xl">
              {selectedEvent && (
                <div className="space-y-6">
                  <div className="flex items-start gap-4">
@@ -678,31 +679,32 @@
              )}
           </Modal>
 
-          <Modal isOpen={isChoreModalOpen} onClose={() => setIsChoreModalOpen(false)} title="Assign Chore">
+          <Modal isOpen={isChoreModalOpen} onClose={() => setIsChoreModalOpen(false)} title="Assign Chore" maxWidth="max-w-xl">
             <form onSubmit={handleAddChore} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Chore Description</label>
                 <input required value={choreTitle} onChange={e=>setChoreTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Unload the dishwasher" />
               </div>
               
-              {/* Stacked vertically on all screens */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Points</label>
-                <input type="number" min="1" required value={chorePoints} onChange={e=>setChorePoints(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="10" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Assignee</label>
-                <select required value={choreAssignee} onChange={e=>setChoreAssignee(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                  <option value="" disabled>Select member</option>
-                  {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Points</label>
+                  <input type="number" min="1" required value={chorePoints} onChange={e=>setChorePoints(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="10" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Assignee</label>
+                  <select required value={choreAssignee} onChange={e=>setChoreAssignee(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="" disabled>Select member</option>
+                    {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
               </div>
               
               <button type="submit" className="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors">Assign Chore</button>
             </form>
           </Modal>
 
-          <Modal isOpen={isAnnouncementModalOpen} onClose={() => setIsAnnouncementModalOpen(false)} title="Post Announcement">
+          <Modal isOpen={isAnnouncementModalOpen} onClose={() => setIsAnnouncementModalOpen(false)} title="Post Announcement" maxWidth="max-w-xl">
             <form onSubmit={handleAddAnnouncement} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Headline</label>
