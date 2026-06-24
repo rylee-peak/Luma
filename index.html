@@ -187,9 +187,6 @@
        if (event.category === 'Google Calendar') return { borderColor: '#4285F4' };
        if (!event.members || event.members.length === 0) return { borderColor: '#94A3B8' };
        
-       // For borders, we'll just use the first person's color if multiple, 
-       // or a standard color, since gradients don't work natively on borders without hacks.
-       // We can use a colored left-border trick in the UI instead.
        const m = members.find(x => x.id === event.members[0]);
        return { borderColor: m?.color || '#3B82F6' };
     };
@@ -371,7 +368,7 @@
                 category: 'Google Calendar',
                 location: item.location || '',
                 description: item.description || '',
-                members: [] // Cannot infer members for Google events natively without syncing emails
+                members: [] 
               };
             });
             
@@ -453,7 +450,7 @@
                 
                 if (hSnap.exists()) {
                   setHousehold(hSnap.data());
-                  // Ensure members have colors
+                  
                   let fetchedMembers = hSnap.data().members || [];
                   let needsUpdate = false;
                   fetchedMembers = fetchedMembers.map((m, i) => {
@@ -566,15 +563,15 @@
                 <label className="block text-sm font-medium text-slate-700 mb-1">Event Title</label>
                 <input required value={eventTitle} onChange={e=>setEventTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g., Soccer Practice" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
-                  <input type="date" required value={eventDate} onChange={e=>setEventDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Time</label>
-                  <input type="time" required value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
+              
+              {/* Stacked vertically on all screens so desktop native pickers don't overflow */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
+                <input type="date" required value={eventDate} onChange={e=>setEventDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Time</label>
+                <input type="time" required value={eventTime} onChange={e=>setEventTime(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
               </div>
               
               <div>
@@ -687,19 +684,20 @@
                 <label className="block text-sm font-medium text-slate-700 mb-1">Chore Description</label>
                 <input required value={choreTitle} onChange={e=>setChoreTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Unload the dishwasher" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Points</label>
-                  <input type="number" min="1" required value={chorePoints} onChange={e=>setChorePoints(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="10" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Assignee</label>
-                  <select required value={choreAssignee} onChange={e=>setChoreAssignee(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="" disabled>Select member</option>
-                    {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
+              
+              {/* Stacked vertically on all screens */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Points</label>
+                <input type="number" min="1" required value={chorePoints} onChange={e=>setChorePoints(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="10" />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Assignee</label>
+                <select required value={choreAssignee} onChange={e=>setChoreAssignee(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+                  <option value="" disabled>Select member</option>
+                  {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </div>
+              
               <button type="submit" className="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors">Assign Chore</button>
             </form>
           </Modal>
