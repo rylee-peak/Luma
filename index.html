@@ -285,6 +285,7 @@
       // Core Data States
       const [household, setHousehold] = useState(null);
       const [pairedHousehold, setPairedHousehold] = useState(() => safeGetStorage('luma_pairedHousehold', null));
+      const [pairedDisplayId, setPairedDisplayId] = useState(() => safeGetStorage('luma_pairedDisplayId', null));
       const [members, setMembers] = useState([]);
       const [events, setEvents] = useState(() => safeGetStorage('luma_events', []));
       const [chores, setChores] = useState(() => safeGetStorage('luma_chores', []));
@@ -317,6 +318,7 @@
       const [announcementText, setAnnouncementText] = useState("");
 
       useEffect(() => { safeSetStorage('luma_pairedHousehold', pairedHousehold); }, [pairedHousehold]);
+      useEffect(() => { safeSetStorage('luma_pairedDisplayId', pairedDisplayId); }, [pairedDisplayId]);
       useEffect(() => { safeSetStorage('luma_events', events); }, [events]);
       useEffect(() => { safeSetStorage('luma_chores', chores); }, [chores]);
       useEffect(() => { safeSetStorage('luma_announcements', announcements); }, [announcements]);
@@ -333,7 +335,11 @@
       const updateHouseholdData = async (newHousehold) => {
         setHousehold(newHousehold);
         if (newHousehold?.id) {
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'households', newHousehold.id), { name: newHousehold.name, inviteCode: newHousehold.inviteCode || null }).catch(console.error);
+          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'households', newHousehold.id), { 
+            name: newHousehold.name, 
+            inviteCode: newHousehold.inviteCode || null,
+            displays: newHousehold.displays || [] 
+          }).catch(console.error);
         }
       };
 
@@ -483,6 +489,21 @@
         return () => unsubscribe();
       }, []);
 
+      // Kiosk Real-time Exit Listener
+      useEffect(() => {
+        if (pairedHousehold && pairedDisplayId) {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pairing_codes', pairedDisplayId);
+          const unsub = onSnapshot(docRef, (snap) => {
+            if (!snap.exists() || snap.data().status !== 'linked') {
+              // The display lease was deleted or revoked by an admin!
+              setPairedHousehold(null);
+              setPairedDisplayId(null);
+            }
+          }, (err) => console.error("Display sync error:", err));
+          return () => unsub();
+        }
+      }, [pairedHousehold, pairedDisplayId]);
+
       const handleLogout = () => {
         signOut(auth);
         safeSetStorage('luma_ui_logged_in', false);
@@ -537,16 +558,17 @@
         );
       }
 
-      if (pairedHousehold) return <KioskMode onExit={() => setPairedHousehold(null)} household={pairedHousehold} events={events} chores={chores} announcements={announcements} members={members} weather={weather} />;
+      if (pairedHousehold) return <KioskMode onExit={() => { setPairedHousehold(null); setPairedDisplayId(null); }} household={pairedHousehold} events={events} chores={chores} announcements={announcements} members={members} weather={weather} />;
 
       const hasRealProvider = user?.providerData?.length > 0;
       const isTrueUser = user && !user.isAnonymous && (hasRealProvider || uiLoggedIn);
 
       if (!isTrueUser) {
-        return <AuthScreen onPairDisplay={(linkedHousehold) => setPairedHousehold(linkedHousehold)} onLoginSuccess={() => { safeSetStorage('luma_ui_logged_in', true); setUiLoggedIn(true); }} />;
+        return <AuthScreen onPairDisplay={(linkedHousehold, displayId) => { setPairedHousehold(linkedHousehold); setPairedDisplayId(displayId); }} onLoginSuccess={() => { safeSetStorage('luma_ui_logged_in', true); setUiLoggedIn(true); }} />;
       }
 
       if (!household) return <OnboardingScreen user={user} setHousehold={setHousehold} members={members} setMembers={setMembers} />;
+      
       if (currentView === 'kiosk') return <KioskMode onExit={() => setCurrentView('dashboard')} household={household} events={events} chores={chores} announcements={announcements} members={members} weather={weather} />;
 
       const currentUserMember = members.find(m => m.id === user.uid);
@@ -1334,7 +1356,6 @@
     }
 
     function SettingsView({ user, household, setHousehold, members, setMembers, isAdmin, weather, setWeather }) {
-      const [displays, setDisplays] = useState([]);
       const [showLinkInput, setShowLinkInput] = useState(false);
       const [linkCode, setLinkCode] = useState("");
       const [linkError, setLinkError] = useState(null);
@@ -1363,11 +1384,24 @@
             const snap = await getDoc(docRef);
             if (snap.exists() && snap.data().status === 'waiting') {
               await updateDoc(docRef, { status: 'linked', household: household });
-              setDisplays([...displays, { id: Date.now(), name: "Luma Display", status: "Online" }]);
+              
+              // Permanently save the display to the household's displays list
+              const newDisplays = [...(household.displays || []), { id: linkCode, name: "Luma Display", status: "Online" }];
+              setHousehold({ ...household, displays: newDisplays });
+              
               setShowLinkInput(false); setLinkCode("");
             } else setLinkError({ text: "Invalid or expired code." });
           } catch(err) { setLinkError({ text: "An error occurred.", details: err.message }); } finally { setIsLinking(false); }
         }
+      };
+
+      const handleDeleteDisplay = async (displayId) => {
+        // Remove from UI
+        const newDisplays = (household.displays || []).filter(d => d.id !== displayId);
+        setHousehold({ ...household, displays: newDisplays });
+        
+        // Hard-delete the pairing document. This instantly forces the listening Kiosk to disconnect!
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pairing_codes', displayId)).catch(console.error);
       };
 
       const handleSaveWeather = async () => {
@@ -1532,10 +1566,10 @@
                   )}
 
                   <div className="flex flex-col gap-4 mt-6">
-                     {displays.map(display => (
+                     {(household?.displays || []).map(display => (
                       <div key={display.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                         <div className="flex items-center gap-3"><Monitor className="text-slate-400" size={24} /><div><p className="font-bold">{display.name}</p><p className="text-xs text-green-600 font-medium">● {display.status}</p></div></div>
-                        {isAdmin && <button onClick={() => setDisplays(displays.filter(d => d.id !== display.id))} className="text-red-500 p-2"><Trash2 size={18} /></button>}
+                        {isAdmin && <button onClick={() => handleDeleteDisplay(display.id)} className="text-red-500 p-2"><Trash2 size={18} /></button>}
                       </div>
                      ))}
                   </div>
@@ -1673,8 +1707,8 @@
           setDoc(docRef, { status: 'waiting', createdAt: serverTimestamp() }).catch(console.error);
           unsub = onSnapshot(docRef, (snap) => {
              if (snap.exists() && snap.data().status === 'linked') {
-                 onPairDisplay(snap.data().household);
-                 deleteDoc(docRef).catch(console.error);
+                 // Pass the code back up so the App can keep listening to it for deletions
+                 onPairDisplay(snap.data().household, code);
              }
           }, (err) => console.error(err));
         }
