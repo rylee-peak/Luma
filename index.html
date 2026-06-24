@@ -259,8 +259,8 @@
     function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl' }) {
       if (!isOpen) return null;
       return (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[150] flex items-center justify-center p-4 fade-in" onClick={onClose}>
-          <div className={`bg-white rounded-3xl shadow-2xl w-full ${maxWidth} overflow-hidden flex flex-col max-h-[90vh]`} onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[150] flex items-center justify-center p-6 sm:p-12 fade-in" onClick={onClose}>
+          <div className={`bg-white rounded-3xl shadow-2xl w-full ${maxWidth} overflow-hidden flex flex-col max-h-[75vh]`} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-6 border-b border-slate-100 shrink-0">
               <h3 className="font-bold text-xl">{title}</h3>
               <button onClick={onClose} className="text-slate-400 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
