@@ -248,7 +248,7 @@
       }
     }
 
-    function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-xl' }) {
+    function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl' }) {
       if (!isOpen) return null;
       return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[150] flex items-center justify-center p-4 fade-in" onClick={onClose}>
