@@ -1629,7 +1629,8 @@
       return (
         <div className="fixed inset-0 bg-[#F8FAFC] text-slate-800 z-[100] flex flex-col p-8 overflow-hidden select-none fade-in">
           <div className="absolute top-0 left-0 w-24 h-24 z-50 cursor-pointer" onClick={onExit} />
-          <header className="flex justify-between items-start mb-10">
+          
+          <header className="flex justify-between items-start mb-10 shrink-0">
             <div>
               <h2 className="text-3xl font-bold text-slate-500">{household?.name || 'Luma'}</h2>
               <p className="text-2xl text-blue-600 flex items-center gap-2 mt-2 font-medium"><Sun size={28} /> {weather?.temp || '72'}° {weather?.condition || 'Sunny'}</p>
@@ -1642,7 +1643,7 @@
 
           {/* DEPARTURE WARNING BANNER */}
           {departingEvent && (
-            <div className="bg-gradient-to-r from-red-500 to-rose-600 rounded-[2rem] p-6 mb-8 shadow-lg text-white flex items-center justify-between animate-pulse">
+            <div className="bg-gradient-to-r from-red-500 to-rose-600 rounded-[2rem] p-6 mb-8 shadow-lg text-white flex items-center justify-between animate-pulse shrink-0">
               <div className="flex items-center gap-5">
                 <div className="bg-white/20 p-4 rounded-full"><MapPin size={32} /></div>
                 <div>
@@ -1664,28 +1665,28 @@
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-8 flex-1">
-            <div className="col-span-1 flex flex-col gap-8">
+          <div className="grid grid-cols-3 gap-8 flex-1 min-h-0">
+            <div className="col-span-1 flex flex-col gap-8 min-h-0">
               {activeAnnouncement && (
-                <div className="bg-gradient-to-br from-orange-400 to-orange-500 rounded-[2rem] p-8 shadow-lg text-white">
+                <div className="bg-gradient-to-br from-orange-400 to-orange-500 rounded-[2rem] p-8 shadow-lg text-white shrink-0">
                   <div className="flex items-center gap-3 mb-4 opacity-80 uppercase tracking-widest text-sm font-bold"><Megaphone size={20}/> Announcement</div>
                   <h3 className="text-3xl font-bold mb-3 leading-tight">{activeAnnouncement.title}</h3>
                   <p className="text-xl opacity-90">{activeAnnouncement.text}</p>
                 </div>
               )}
-              <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 flex-1 flex flex-col">
-                <h3 className="text-3xl font-bold mb-8 flex items-center gap-4 text-slate-800"><CheckSquare className="text-blue-500" size={32} /> Today's Tasks</h3>
-                <div className="space-y-6 flex-1 overflow-hidden">
+              <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0">
+                <h3 className="text-3xl font-bold mb-8 flex items-center gap-4 text-slate-800 shrink-0"><CheckSquare className="text-blue-500" size={32} /> Today's Tasks</h3>
+                <div className="space-y-6 flex-1 overflow-y-auto overflow-x-hidden pr-2">
                   {chores && chores.length > 0 ? (
                     chores.map(chore => {
                       const assignee = members?.find(m => m.id === chore.assigneeId);
                       return (
                         <div key={chore.id} className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${chore.done ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-slate-100 shadow-sm'}`}>
                           <div className="flex items-center gap-5">
-                            <div className={`w-10 h-10 rounded-xl border-4 flex items-center justify-center ${chore.done ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-300 text-transparent'}`}><CheckSquare size={24} /></div>
+                            <div className={`w-10 h-10 rounded-xl border-4 flex items-center justify-center shrink-0 ${chore.done ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-300 text-transparent'}`}><CheckSquare size={24} /></div>
                             <span className={`text-2xl font-bold ${chore.done ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{chore.title}</span>
                           </div>
-                          {assignee && <div className="px-4 py-1 rounded-full font-bold text-xl shadow-sm border-2 bg-white" style={{color: assignee.color, borderColor: assignee.color}}>{assignee.name.split(' ')[0]}</div>}
+                          {assignee && <div className="px-4 py-1 rounded-full font-bold text-xl shadow-sm border-2 bg-white shrink-0" style={{color: assignee.color, borderColor: assignee.color}}>{assignee.name.split(' ')[0]}</div>}
                         </div>
                       )
                     })
@@ -1693,42 +1694,42 @@
                 </div>
               </div>
             </div>
-            <div className="col-span-2 bg-white rounded-[2rem] p-10 shadow-sm border border-slate-200">
-               <h3 className="text-3xl font-bold mb-10 flex items-center gap-4 text-slate-800"><CalendarIcon className="text-orange-500" size={36} /> Today's Schedule</h3>
-              <div className="space-y-6">
+            <div className="col-span-2 bg-white rounded-[2rem] p-10 shadow-sm border border-slate-200 flex flex-col min-h-0">
+               <h3 className="text-3xl font-bold mb-10 flex items-center gap-4 text-slate-800 shrink-0"><CalendarIcon className="text-orange-500" size={36} /> Today's Schedule</h3>
+              <div className="space-y-6 flex-1 overflow-y-auto pr-4">
                  {todayEvents.length > 0 ? (
                    todayEvents.map(event => {
                     const displayTime = formatTimeDisplay(event.time);
                     return (
-                      <div key={event.id} className="flex items-center gap-8 bg-slate-50 border border-slate-100 p-8 rounded-3xl relative overflow-hidden">
+                      <div key={event.id} className="flex items-center gap-8 bg-slate-50 border border-slate-100 p-8 rounded-3xl relative overflow-hidden shrink-0">
                         <div className={`absolute left-0 top-0 bottom-0 w-3 ${event.category==='Birthday'?'bg-pink-500':''}`} style={event.category !== 'Birthday' ? getEventBackgroundStyle(event, members) : {}}></div>
-                        <div className="text-4xl font-black text-slate-800 min-w-[180px] pl-4 whitespace-nowrap">{displayTime}</div>
-                        <div className="flex-1">
-                          <h4 className="text-3xl font-bold text-slate-800 mb-2">{event.title}</h4>
+                        <div className="text-4xl font-black text-slate-800 min-w-[180px] pl-4 whitespace-nowrap shrink-0">{displayTime}</div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-3xl font-bold text-slate-800 mb-2 truncate">{event.title}</h4>
                           <div className="flex items-center gap-4 text-2xl text-slate-500 font-medium">
                             {event.category === 'Birthday' && <span className="flex items-center gap-1 text-pink-500"><Gift size={24}/></span>}
                             {event.category}
                             
                             {event.members && event.members.length > 0 && (
-                               <span className="flex items-center gap-2 ml-4 border-l pl-4 border-slate-300 text-slate-600 font-bold">
+                               <span className="flex items-center gap-2 ml-4 border-l pl-4 border-slate-300 text-slate-600 font-bold whitespace-nowrap">
                                  <Users size={24}/> {getEventMembersText(event, members)}
                                </span>
                             )}
                             
-                            {event.location && <span className="flex items-center gap-2 ml-4 border-l pl-4 border-slate-300"><MapPin size={24}/> {event.location}</span>}
+                            {event.location && <span className="flex items-center gap-2 ml-4 border-l pl-4 border-slate-300 truncate"><MapPin size={24} className="shrink-0"/> {event.location}</span>}
                           </div>
                         </div>
                       </div>
                     )
                   })
-                ) : <div className="h-full flex flex-col items-center justify-center text-slate-400 mt-32"><CalendarIcon size={80} className="mb-6 opacity-20" /><p className="text-3xl font-medium text-slate-500">Clear calendar ahead.</p><p className="text-xl mt-3">Enjoy your day!</p></div>}
+                ) : <div className="h-full flex flex-col items-center justify-center text-slate-400 mt-16"><CalendarIcon size={80} className="mb-6 opacity-20" /><p className="text-3xl font-medium text-slate-500">Clear calendar ahead.</p><p className="text-xl mt-3">Enjoy your day!</p></div>}
               </div>
             </div>
           </div>
 
           {/* FAMILY KEY LEGEND */}
           {members && members.length > 0 && (
-            <div className="mt-6 flex justify-center gap-8 items-center bg-white py-4 px-10 rounded-full shadow-sm border border-slate-200 mx-auto z-10 relative">
+            <div className="mt-6 flex justify-center gap-8 items-center bg-white py-4 px-10 rounded-full shadow-sm border border-slate-200 mx-auto z-10 relative shrink-0">
                <span className="text-sm font-bold text-slate-400 uppercase tracking-widest mr-2 flex items-center gap-2">
                  <Users size={18} /> Family Key
                </span>
