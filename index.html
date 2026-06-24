@@ -43,7 +43,7 @@
       Menu, X, Home, Calendar as CalendarIcon, CheckSquare, 
       Image as ImageIcon, Settings, LogOut, Plus, Bell, 
       Sun, Monitor, UserPlus, Trash2, Clock, Megaphone, Star, Upload, Trophy, Target, Info, RefreshCw,
-      Check, MapPin, Map, Users, AlignLeft, Gift, Palette
+      Check, MapPin, Map, Users, AlignLeft, Gift, Palette, PartyPopper
     } from 'lucide-react';
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -971,7 +971,13 @@
                       <span>You have {pendingChores.length} chore{pendingChores.length !== 1 ? 's' : ''} left today!</span>
                     </div>
                   ) : (
-                    <div className="p-6 text-sm text-slate-500 text-center">You're all caught up!</div>
+                    <div className="p-6 flex flex-col items-center justify-center text-center">
+                      <div className="w-12 h-12 bg-yellow-50 text-yellow-500 rounded-full flex items-center justify-center mb-3 shadow-sm border border-yellow-100">
+                        <PartyPopper size={24} />
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">You're all caught up!</p>
+                      <p className="text-xs text-slate-500 mt-1">Time to relax.</p>
+                    </div>
                   )}
                 </div>
               )}
