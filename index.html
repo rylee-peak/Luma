@@ -306,7 +306,6 @@
       const [events, setEvents] = useState(() => safeGetStorage('luma_events', []));
       const [chores, setChores] = useState(() => safeGetStorage('luma_chores', []));
       const [announcements, setAnnouncements] = useState(() => safeGetStorage('luma_announcements', []));
-      const [familyGoal, setFamilyGoal] = useState(() => safeGetStorage('luma_familyGoal', 500));
       const [weather, setWeather] = useState(() => safeGetStorage('luma_weather', { temp: 72, condition: 'Sunny' }));
       const [photos, setPhotos] = useState([]); 
       const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -327,7 +326,6 @@
       const [eventMembers, setEventMembers] = useState([]);
 
       const [choreTitle, setChoreTitle] = useState("");
-      const [chorePoints, setChorePoints] = useState("");
       const [choreAssignee, setChoreAssignee] = useState("");
 
       const [announcementTitle, setAnnouncementTitle] = useState("");
@@ -338,7 +336,6 @@
       useEffect(() => { safeSetStorage('luma_events', events); }, [events]);
       useEffect(() => { safeSetStorage('luma_chores', chores); }, [chores]);
       useEffect(() => { safeSetStorage('luma_announcements', announcements); }, [announcements]);
-      useEffect(() => { safeSetStorage('luma_familyGoal', familyGoal); }, [familyGoal]);
 
       // Cloud Sync Wrappers
       const updateHouseholdMembers = async (newMembers) => {
@@ -552,8 +549,8 @@
 
       const handleAddChore = (e) => {
         e.preventDefault();
-        setChores([...chores, { id: Date.now(), title: choreTitle, points: Number(chorePoints), assigneeId: choreAssignee, done: false }]);
-        setChoreTitle(""); setChorePoints(""); setChoreAssignee(""); setIsChoreModalOpen(false);
+        setChores([...chores, { id: Date.now(), title: choreTitle, assigneeId: choreAssignee, done: false }]);
+        setChoreTitle(""); setChoreAssignee(""); setIsChoreModalOpen(false);
       };
 
       const handleAddAnnouncement = (e) => {
@@ -727,11 +724,6 @@
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Points</label>
-                  <input type="number" min="1" required value={chorePoints} onChange={e=>setChorePoints(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="10" />
-                </div>
-                
-                <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Assignee</label>
                   <select required value={choreAssignee} onChange={e=>setChoreAssignee(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
                     <option value="" disabled>Select member</option>
@@ -817,7 +809,7 @@
               {currentView === 'dashboard' && <DashboardView currentUser={currentUserMember} events={events} chores={chores} setChores={setChores} announcements={announcements} setAnnouncements={setAnnouncements} onAddEvent={() => setIsEventModalOpen(true)} isAdmin={isAdmin} onAddAnnouncement={() => setIsAnnouncementModalOpen(true)} members={members} setMembers={updateHouseholdMembers} isSyncing={isSyncing} onManualSync={() => syncGoogleCalendar(user, false)} onViewEvent={(e) => setSelectedEvent(e)} />}
               {currentView === 'calendar' && <CalendarView events={events} onAddEvent={(prefillDate) => { setEventDate(prefillDate || getTodayDateString()); setIsEventModalOpen(true); }} onViewEvent={(e) => setSelectedEvent(e)} members={members} />}
               {currentView === 'chores' && <ChoresView chores={chores} setChores={setChores} members={members} setMembers={updateHouseholdMembers} onAddChore={() => setIsChoreModalOpen(true)} isAdmin={isAdmin} />}
-              {currentView === 'progress' && <ProgressView members={members} familyGoal={familyGoal} />}
+              {currentView === 'progress' && <ProgressView members={members} chores={chores} />}
               {currentView === 'photos' && <PhotosView photos={photos} setPhotos={setPhotos} />}
               {currentView === 'settings' && <SettingsView user={user} household={household} setHousehold={updateHouseholdData} members={members} setMembers={updateHouseholdMembers} isAdmin={isAdmin} weather={weather} setWeather={setWeather} />}
             </div>
@@ -841,7 +833,7 @@
           const newHouseholdId = 'house_' + Date.now();
           const userEmail = user.email || '';
           const userName = user.displayName || 'You';
-          const newMember = { id: user.uid, email: userEmail, name: userName, role: 'Owner', points: 0, color: PROFILE_COLORS[0] };
+          const newMember = { id: user.uid, email: userEmail, name: userName, role: 'Owner', color: PROFILE_COLORS[0] };
           const newHousehold = { name: houseName, id: newHouseholdId, members: [newMember], inviteCode: Math.random().toString(36).substring(2, 8).toUpperCase() };
           
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'households', newHouseholdId), newHousehold);
@@ -877,7 +869,7 @@
               const userName = user.displayName || 'You';
               
               const colorAssigned = PROFILE_COLORS[(hData.members?.length || 0) % PROFILE_COLORS.length];
-              const newMember = { id: user.uid, email: userEmail, name: userName, role: 'Member', points: 0, color: colorAssigned };
+              const newMember = { id: user.uid, email: userEmail, name: userName, role: 'Member', color: colorAssigned };
               
               const memberExists = hData.members && hData.members.some(m => m.id === user.uid);
               const updatedMembers = memberExists ? hData.members : [...(hData.members || []), newMember];
@@ -973,10 +965,6 @@
       const handleToggleChore = (chore) => {
         const isNowDone = !chore.done;
         setChores(chores.map(c => c.id === chore.id ? { ...c, done: isNowDone } : c));
-        setMembers(members.map(m => {
-          if (m.id === chore.assigneeId) return { ...m, points: isNowDone ? (m.points || 0) + chore.points : (m.points || 0) - chore.points };
-          return m;
-        }));
       };
 
       const todayStr = getTodayDateString();
@@ -1093,18 +1081,14 @@
               </div>
               <div className="space-y-3">
                 {chores.length > 0 ? (
-                  chores.map(chore => {
-                    const assignee = members.find(m => m.id === chore.assigneeId);
-                    return (
-                      <div key={chore.id} className={`flex items-center gap-3 p-3 rounded-xl border ${chore.done ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-slate-200 shadow-sm'}`}>
-                        <div onClick={() => handleToggleChore(chore)} className={`w-6 h-6 rounded-md border flex items-center justify-center cursor-pointer ${chore.done ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
-                          {chore.done && <CheckSquare size={16} />}
-                        </div>
-                        <span className={`flex-1 font-medium ${chore.done ? 'line-through text-slate-500' : 'text-slate-800'}`}>{chore.title}</span>
-                        {assignee && <span className="text-xs font-bold bg-white border px-2 py-1 rounded-md shadow-sm" style={{color: assignee.color, borderColor: assignee.color}}>{assignee.name}</span>}
+                  chores.map(chore => (
+                    <div key={chore.id} className={`flex items-center gap-3 p-3 rounded-xl border ${chore.done ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-slate-200 shadow-sm'}`}>
+                      <div onClick={() => handleToggleChore(chore)} className={`w-6 h-6 rounded-md border flex items-center justify-center cursor-pointer ${chore.done ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
+                        {chore.done && <CheckSquare size={16} />}
                       </div>
-                    )
-                  })
+                      <span className={`flex-1 font-medium ${chore.done ? 'line-through text-slate-500' : 'text-slate-800'}`}>{chore.title}</span>
+                    </div>
+                  ))
                 ) : (
                   <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
                     <CheckSquare className="mx-auto mb-2 opacity-40 text-slate-400" size={32} />
@@ -1218,15 +1202,9 @@
       const handleToggle = (chore) => {
         const isNowDone = !chore.done;
         setChores(chores.map(c => c.id === chore.id ? { ...c, done: isNowDone } : c));
-        setMembers(members.map(m => {
-          if (m.id === chore.assigneeId) return { ...m, points: isNowDone ? (m.points || 0) + chore.points : (m.points || 0) - chore.points };
-          return m;
-        }));
       };
 
       const handleDelete = (id) => {
-        const chore = chores.find(c => c.id === id);
-        if(chore && chore.done) setMembers(members.map(m => m.id === chore.assigneeId ? { ...m, points: (m.points || 0) - chore.points } : m));
         setChores(chores.filter(c => c.id !== id));
       };
 
@@ -1235,7 +1213,7 @@
           <header className="flex justify-between items-end mb-8">
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Tasks & Chores</h1>
-              <p className="text-slate-500 mt-1">Manage family tasks and earn points.</p>
+              <p className="text-slate-500 mt-1">Manage family tasks and chore completion.</p>
             </div>
             <div className="flex items-center gap-4">
               {isAdmin && <button onClick={onAddChore} className="bg-[#2563EB] text-white px-4 py-2 rounded-xl font-medium shadow-sm hover:bg-blue-700 transition-colors flex items-center gap-2"><Plus size={18} /> Assign Chore</button>}
@@ -1257,7 +1235,6 @@
                             <span className={`block font-bold text-lg ${chore.done ? 'line-through text-slate-500' : 'text-slate-800'}`}>{chore.title}</span>
                             <div className="flex items-center gap-3 mt-1">
                               {assignee && <span className="text-xs font-bold bg-white border px-2 py-1 rounded-md shadow-sm" style={{color: assignee.color, borderColor: assignee.color}}>{assignee.name}</span>}
-                              <span className="text-sm font-medium text-orange-500 flex items-center gap-1"><Star size={14} className="fill-orange-500"/> {chore.points} pts</span>
                             </div>
                           </div>
                         </div>
@@ -1277,17 +1254,22 @@
       );
     }
 
-    function ProgressView({ members, familyGoal }) {
-      const totalPoints = members.reduce((sum, m) => sum + (m.points || 0), 0);
-      const progressPercent = Math.min(100, Math.round((totalPoints / familyGoal) * 100));
-      const sortedMembers = [...members].sort((a, b) => (b.points || 0) - (a.points || 0));
+    function ProgressView({ members, chores }) {
+      const totalChores = chores.length;
+      const completedChores = chores.filter(c => c.done).length;
+      const progressPercent = totalChores === 0 ? 0 : Math.round((completedChores / totalChores) * 100);
+      
+      const sortedMembers = [...members].map(m => {
+        const memberChores = chores.filter(c => c.assigneeId === m.id);
+        return { ...m, completed: memberChores.filter(c => c.done).length };
+      }).sort((a, b) => b.completed - a.completed);
 
       return (
         <div className="max-w-5xl mx-auto space-y-6 fade-in">
           <header className="flex justify-between items-end mb-8">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Family Progress</h1>
-              <p className="text-slate-500 mt-1">Track achievements and recognize hard work.</p>
+              <h1 className="text-3xl font-bold tracking-tight">Chore Progress</h1>
+              <p className="text-slate-500 mt-1">Track chore completion and celebrate hard work.</p>
             </div>
           </header>
 
@@ -1297,8 +1279,8 @@
                 <div className="flex items-center gap-4 mb-6">
                   <div className="bg-orange-100 text-orange-500 p-3 rounded-2xl"><Target size={32} /></div>
                   <div>
-                    <h2 className="text-2xl font-bold">Weekly Family Goal</h2>
-                    <p className="text-slate-500">{totalPoints} / {familyGoal} Points</p>
+                    <h2 className="text-2xl font-bold">Completion Rate</h2>
+                    <p className="text-slate-500">{completedChores} / {totalChores} Tasks Done ({progressPercent}%)</p>
                   </div>
                 </div>
 
@@ -1314,9 +1296,15 @@
                       <div key={member.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                         <div className="flex items-center gap-4">
                           <div className="text-2xl font-black text-slate-300 w-6">{idx + 1}</div>
-                          <div><span className="font-bold text-lg block" style={{color: member.color}}>{member.name}</span><span className="text-sm text-slate-500">{member.role}</span></div>
+                          <div>
+                            <span className="font-bold text-lg block" style={{color: member.color}}>{member.name}</span>
+                            <span className="text-sm text-slate-500">{member.role}</span>
+                          </div>
                         </div>
-                        <div className="text-right"><span className="text-2xl font-black text-orange-500">{member.points || 0}</span><span className="text-orange-500 font-bold ml-1 text-sm">pts</span></div>
+                        <div className="text-right">
+                          <span className="text-2xl font-black text-orange-500">{member.completed}</span>
+                          <span className="text-orange-500 font-bold ml-1 text-sm">done</span>
+                        </div>
                       </div>
                     ))}
                  </div>
