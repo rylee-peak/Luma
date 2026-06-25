@@ -306,8 +306,9 @@
       const [events, setEvents] = useState(() => safeGetStorage('luma_events', []));
       const [chores, setChores] = useState(() => safeGetStorage('luma_chores', []));
       const [announcements, setAnnouncements] = useState(() => safeGetStorage('luma_announcements', []));
+      const [familyGoal, setFamilyGoal] = useState(() => safeGetStorage('luma_familyGoal', 500));
       const [weather, setWeather] = useState(() => safeGetStorage('luma_weather', { temp: 72, condition: 'Sunny' }));
-      const [photos, setPhotos] = useState([]); 
+      const [photos, setPhotos] = useState(() => safeGetStorage('luma_photos', [])); 
       const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
       // Modal States
@@ -336,6 +337,8 @@
       useEffect(() => { safeSetStorage('luma_events', events); }, [events]);
       useEffect(() => { safeSetStorage('luma_chores', chores); }, [chores]);
       useEffect(() => { safeSetStorage('luma_announcements', announcements); }, [announcements]);
+      useEffect(() => { safeSetStorage('luma_familyGoal', familyGoal); }, [familyGoal]);
+      useEffect(() => { safeSetStorage('luma_photos', photos); }, [photos]);
 
       // Cloud Sync Wrappers
       const updateHouseholdMembers = async (newMembers) => {
@@ -1375,24 +1378,37 @@
     }
 
     function PhotosView({ photos, setPhotos }) {
-      const fileInputRef = useRef(null);
+      const [photoUrl, setPhotoUrl] = useState("");
 
-      const handlePhotoUpload = (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length > 0) {
-          const newPhotos = files.map(file => ({ id: Math.random(), url: URL.createObjectURL(file) }));
-          setPhotos([...newPhotos, ...photos]);
+      const handleAddPhoto = (e) => {
+        e.preventDefault();
+        if (photoUrl.trim()) {
+          const newPhoto = { id: Date.now(), url: photoUrl.trim() };
+          setPhotos([newPhoto, ...photos]);
+          setPhotoUrl("");
         }
       };
 
       return (
         <div className="max-w-6xl mx-auto space-y-6 fade-in">
-          <header className="flex justify-between items-end mb-8">
+          <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Family Photos</h1>
+              <p className="text-slate-500 mt-1">Add links to photos hosted online to show on your displays.</p>
             </div>
-            <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handlePhotoUpload} />
-            <button onClick={() => fileInputRef.current.click()} className="bg-[#2563EB] text-white px-4 py-2 rounded-xl font-medium shadow-sm hover:bg-blue-700 transition-colors flex items-center gap-2"><Upload size={18} /> Upload</button>
+            <form onSubmit={handleAddPhoto} className="flex w-full md:w-auto items-center gap-2">
+              <input 
+                type="url" 
+                required 
+                placeholder="https://example.com/photo.jpg" 
+                value={photoUrl}
+                onChange={(e) => setPhotoUrl(e.target.value)}
+                className="w-full md:w-64 px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm shadow-sm" 
+              />
+              <button type="submit" className="bg-[#2563EB] shrink-0 text-white px-4 py-2 rounded-xl font-medium shadow-sm hover:bg-blue-700 transition-colors flex items-center gap-2">
+                <Plus size={18} /> Add Link
+              </button>
+            </form>
           </header>
 
           {photos.length > 0 ? (
@@ -1408,7 +1424,7 @@
             <div className="text-center py-20 text-slate-500 bg-white rounded-3xl border border-slate-200 border-dashed shadow-sm">
               <ImageIcon className="mx-auto mb-4 opacity-30 text-slate-400" size={64} />
               <p className="font-medium text-slate-600 text-xl">Your album is empty.</p>
-              <button onClick={() => fileInputRef.current.click()} className="mt-6 bg-blue-50 text-blue-600 px-6 py-3 rounded-xl font-bold hover:bg-blue-100 transition-colors inline-flex items-center gap-2"><Upload size={20} /> Choose Images</button>
+              <p className="text-sm mt-2">Paste a photo URL in the box above to get started.</p>
             </div>
           )}
         </div>
