@@ -574,7 +574,7 @@
         );
       }
 
-      if (pairedHousehold) return <KioskMode onExit={() => { setPairedHousehold(null); setPairedDisplayId(null); }} household={pairedHousehold} events={events} chores={chores} announcements={announcements} members={members} weather={weather} />;
+      if (pairedHousehold) return <KioskMode onExit={() => { setPairedHousehold(null); setPairedDisplayId(null); }} household={pairedHousehold} events={events} chores={chores} announcements={announcements} members={members} weather={weather} photos={photos} />;
 
       const hasRealProvider = user?.providerData?.length > 0;
       const isTrueUser = user && !user.isAnonymous && (hasRealProvider || uiLoggedIn);
@@ -585,7 +585,7 @@
 
       if (!household) return <OnboardingScreen user={user} setHousehold={setHousehold} members={members} setMembers={setMembers} />;
       
-      if (currentView === 'kiosk') return <KioskMode onExit={() => setCurrentView('dashboard')} household={household} events={events} chores={chores} announcements={announcements} members={members} weather={weather} />;
+      if (currentView === 'kiosk') return <KioskMode onExit={() => setCurrentView('dashboard')} household={household} events={events} chores={chores} announcements={announcements} members={members} weather={weather} photos={photos} />;
 
       const currentUserMember = members.find(m => m.id === user.uid);
       const isAdmin = currentUserMember?.role === 'Owner' || currentUserMember?.role === 'Admin';
@@ -1725,25 +1725,147 @@
       );
     }
 
-    function KioskMode({ onExit, household, events, chores, announcements, members, weather }) {
+    function KioskMode({ onExit, household, events, chores, announcements, members, weather, photos }) {
       const [time, setTime] = useState(new Date());
+      const [isScreensaver, setIsScreensaver] = useState(true);
+      const [photoIndex, setPhotoIndex] = useState(0);
 
+      // Keep Screen Awake via WakeLock API
+      useEffect(() => {
+        let wakeLock = null;
+        const requestWakeLock = async () => {
+          try {
+            if ('wakeLock' in navigator) {
+              wakeLock = await navigator.wakeLock.request('screen');
+            }
+          } catch (err) { console.error("WakeLock failed:", err); }
+        };
+        
+        requestWakeLock();
+        
+        const handleVisibilityChange = () => {
+          if (wakeLock !== null && document.visibilityState === 'visible') requestWakeLock();
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
+        return () => {
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+          if (wakeLock !== null) wakeLock.release();
+        };
+      }, []);
+
+      // Clock
       useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);
         return () => clearInterval(timer);
       }, []);
 
+      // Idle Timer for Screensaver
+      useEffect(() => {
+        let idleTimer;
+        const handleActivity = () => {
+          if (isScreensaver) setIsScreensaver(false);
+          clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => setIsScreensaver(true), 60000); // Return to screensaver after 1 minute
+        };
+
+        // Attach listeners
+        window.addEventListener('click', handleActivity);
+        window.addEventListener('touchstart', handleActivity);
+        window.addEventListener('mousemove', handleActivity);
+
+        // Start initial timer
+        idleTimer = setTimeout(() => setIsScreensaver(true), 60000);
+
+        return () => {
+          clearTimeout(idleTimer);
+          window.removeEventListener('click', handleActivity);
+          window.removeEventListener('touchstart', handleActivity);
+          window.removeEventListener('mousemove', handleActivity);
+        };
+      }, [isScreensaver]);
+
+      // Slideshow Timer
+      useEffect(() => {
+        if (!isScreensaver || !photos || photos.length <= 1) return;
+        const interval = setInterval(() => {
+          setPhotoIndex(prev => (prev + 1) % photos.length);
+        }, 15000); // Change photo every 15 seconds
+        return () => clearInterval(interval);
+      }, [isScreensaver, photos]);
+
       const activeAnnouncement = announcements && announcements.length > 0 ? announcements[0] : null;
       const todayStr = getTodayDateString();
       const todayEvents = events ? events.filter(e => e.date === todayStr).sort((a,b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time)) : [];
 
-      // Calculate if any event is coming up in the next 30 minutes
       const currentMins = time.getHours() * 60 + time.getMinutes();
+      
       const departingEvent = todayEvents.find(e => {
         const evMins = parseTimeToMinutes(e.time);
         const diff = evMins - currentMins;
-        return diff >= 0 && diff <= 30; // Between 0 and 30 minutes away
+        return diff >= 0 && diff <= 30; 
       });
+
+      // Show upcoming events for screensaver
+      const upcomingEvents = todayEvents.filter(e => parseTimeToMinutes(e.time) >= currentMins).slice(0, 3);
+
+      if (isScreensaver) {
+        const currentPhoto = photos && photos.length > 0 ? photos[photoIndex].url : null;
+        
+        return (
+          <div className="fixed inset-0 bg-slate-900 z-[200] flex flex-col items-center justify-center cursor-pointer fade-in overflow-hidden select-none">
+            {currentPhoto ? (
+              <div 
+                className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000 opacity-80" 
+                style={{ backgroundImage: `url(${currentPhoto})` }}
+              >
+                <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"></div>
+              </div>
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-900 to-black"></div>
+            )}
+
+            <div className="relative z-10 text-center flex flex-col items-center px-8 w-full max-w-4xl">
+              <h1 className="text-[10rem] sm:text-[14rem] font-black tracking-tighter leading-none text-white drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">
+                {time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+              </h1>
+              <p className="text-3xl sm:text-5xl text-slate-200 font-bold drop-shadow-lg mt-4">
+                {time.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </p>
+
+              {upcomingEvents.length > 0 && (
+                <div className="mt-16 bg-black/40 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] text-left w-full sm:w-auto min-w-[400px] shadow-2xl">
+                  <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest mb-5 flex items-center gap-2">
+                    <CalendarIcon size={18}/> Coming Up
+                  </h3>
+                  <div className="space-y-5">
+                    {upcomingEvents.map(ev => (
+                      <div key={ev.id} className="flex items-center gap-5">
+                        <div className="w-1.5 h-10 rounded-full" style={{ backgroundColor: getCategoryColor(ev.category) }}></div>
+                        <div>
+                          <p className="text-2xl font-bold text-white leading-tight">{ev.title}</p>
+                          <div className="flex items-center gap-3 text-blue-200 font-medium text-lg mt-1">
+                            <span>{formatTimeDisplay(ev.time)}</span>
+                            {ev.members?.length > 0 && (
+                              <span className="flex items-center gap-1 border-l border-white/20 pl-3">
+                                <Users size={16}/> {getEventMembersText(ev, members)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="absolute bottom-8 text-white/40 text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+              Tap anywhere to open dashboard
+            </div>
+          </div>
+        );
+      }
 
       return (
         <div className="fixed inset-0 bg-[#F8FAFC] text-slate-800 z-[100] flex flex-col p-8 overflow-hidden select-none fade-in">
