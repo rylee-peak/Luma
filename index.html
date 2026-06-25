@@ -585,7 +585,7 @@
       if (currentView === 'kiosk') return <KioskMode onExit={() => setCurrentView('dashboard')} household={household} events={events} chores={chores} announcements={announcements} members={members} weather={weather} />;
 
       const currentUserMember = members.find(m => m.id === user.uid);
-      const isAdmin = currentUserMember?.role === 'Owner' || currentUserMember?.role === 'Admin';
+      const isAdmin = ['Owner', 'Admin', 'Household Manager'].includes(currentUserMember?.role);
 
       return (
         <div className="flex h-screen w-full bg-[#F8FAFC] text-[#0F172A] font-sans overflow-hidden relative">
@@ -1208,6 +1208,8 @@
         setChores(chores.filter(c => c.id !== id));
       };
 
+      const unassignedChores = chores.filter(c => !c.assigneeId);
+
       return (
         <div className="max-w-4xl mx-auto space-y-6 fade-in">
           <header className="flex justify-between items-end mb-8">
@@ -1220,34 +1222,79 @@
             </div>
           </header>
 
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-             {chores.length > 0 ? (
-               <div className="space-y-3">
-                 {chores.map(chore => {
-                   const assignee = members.find(m => m.id === chore.assigneeId);
-                   return (
-                     <div key={chore.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${chore.done ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-slate-200 shadow-sm hover:shadow-md'}`}>
-                        <div className="flex items-center gap-4">
-                          <div onClick={() => handleToggle(chore)} className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-colors ${chore.done ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 hover:border-blue-400'}`}>
-                            {chore.done && <CheckSquare size={20} />}
-                          </div>
-                          <div>
-                            <span className={`block font-bold text-lg ${chore.done ? 'line-through text-slate-500' : 'text-slate-800'}`}>{chore.title}</span>
-                            <div className="flex items-center gap-3 mt-1">
-                              {assignee && <span className="text-xs font-bold bg-white border px-2 py-1 rounded-md shadow-sm" style={{color: assignee.color, borderColor: assignee.color}}>{assignee.name}</span>}
-                            </div>
-                          </div>
-                        </div>
-                        {isAdmin && <button onClick={() => handleDelete(chore.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={20}/></button>}
-                     </div>
-                   );
-                 })}
-               </div>
-             ) : (
-                <div className="text-center py-16 text-slate-500 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
+          <div className="space-y-8">
+             {chores.length === 0 && (
+                <div className="text-center py-16 text-slate-500 bg-white rounded-3xl border border-slate-100 border-dashed shadow-sm">
                   <CheckSquare className="mx-auto mb-4 opacity-40 text-slate-400" size={48} />
                   <p className="font-medium text-slate-600 text-lg">No chores assigned.</p>
                 </div>
+             )}
+
+             {members.map(member => {
+               const memberChores = chores.filter(c => c.assigneeId === member.id);
+
+               return (
+                 <div key={member.id} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                    <div className="flex justify-between items-center mb-6">
+                      <h2 className="text-xl font-bold flex items-center gap-3" style={{color: member.color || '#3B82F6'}}>
+                        <div className="w-8 h-8 rounded-full text-white flex items-center justify-center text-sm shadow-sm" style={{backgroundColor: member.color || '#3B82F6'}}>{member.name.charAt(0)}</div>
+                        {member.name.split(' ')[0]}'s Tasks
+                      </h2>
+                      <span className="text-sm font-medium bg-slate-100 text-slate-600 px-3 py-1 rounded-lg border border-slate-200">{memberChores.filter(c => !c.done).length} Left</span>
+                    </div>
+                    
+                    {memberChores.length > 0 ? (
+                      <div className="space-y-3">
+                        {memberChores.map(chore => (
+                           <div key={chore.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${chore.done ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-slate-200 shadow-sm hover:shadow-md'}`}>
+                              <div className="flex items-center gap-4">
+                                <div onClick={() => handleToggle(chore)} className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-colors ${chore.done ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 hover:border-blue-400'}`}>
+                                  {chore.done && <CheckSquare size={20} />}
+                                </div>
+                                <div>
+                                  <span className={`block font-bold text-lg ${chore.done ? 'line-through text-slate-500' : 'text-slate-800'}`}>{chore.title}</span>
+                                </div>
+                              </div>
+                              {isAdmin && <button onClick={() => handleDelete(chore.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={20}/></button>}
+                           </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-slate-400 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
+                        <CheckSquare className="mx-auto mb-2 opacity-30 text-slate-300" size={24} />
+                        <p className="text-sm font-medium">All caught up!</p>
+                      </div>
+                    )}
+                 </div>
+               );
+             })}
+
+             {unassignedChores.length > 0 && (
+               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold flex items-center gap-3 text-slate-600">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-sm shadow-sm">?</div>
+                      Unassigned Tasks
+                    </h2>
+                    <span className="text-sm font-medium bg-slate-100 text-slate-600 px-3 py-1 rounded-lg border border-slate-200">{unassignedChores.filter(c => !c.done).length} Left</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {unassignedChores.map(chore => (
+                       <div key={chore.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${chore.done ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-slate-200 shadow-sm hover:shadow-md'}`}>
+                          <div className="flex items-center gap-4">
+                            <div onClick={() => handleToggle(chore)} className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-colors ${chore.done ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 hover:border-blue-400'}`}>
+                              {chore.done && <CheckSquare size={20} />}
+                            </div>
+                            <div>
+                              <span className={`block font-bold text-lg ${chore.done ? 'line-through text-slate-500' : 'text-slate-800'}`}>{chore.title}</span>
+                            </div>
+                          </div>
+                          {isAdmin && <button onClick={() => handleDelete(chore.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={20}/></button>}
+                       </div>
+                    ))}
+                  </div>
+               </div>
              )}
           </div>
         </div>
@@ -1448,6 +1495,11 @@
         setShowColorPickerFor(null);
       };
 
+      const updateMemberRole = (memberId, newRole) => {
+        setMembers(members.map(m => m.id === memberId ? { ...m, role: newRole } : m));
+        showMessage("Role updated!");
+      };
+
       return (
         <div className="max-w-4xl mx-auto fade-in flex flex-col md:flex-row gap-8">
           <div className="w-full md:w-64 space-y-2 shrink-0">
@@ -1509,7 +1561,21 @@
                             </div>
                             <div><p className="font-bold text-lg">{member.name}</p><p className="text-xs font-medium text-slate-500">{member.email}</p></div>
                           </div>
-                          <span className="text-sm bg-slate-200 text-slate-600 px-3 py-1 rounded-full font-bold">{member.role}</span>
+                          <div className="flex flex-col items-end gap-1">
+                            {isAdmin && member.role !== 'Owner' ? (
+                              <select 
+                                value={member.role} 
+                                onChange={(e) => updateMemberRole(member.id, e.target.value)}
+                                className="text-sm bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm"
+                              >
+                                <option value="Member">Member</option>
+                                <option value="Household Manager">Household Manager</option>
+                                <option value="Admin">Admin</option>
+                              </select>
+                            ) : (
+                              <span className="text-sm bg-slate-200 text-slate-600 px-3 py-1 rounded-full font-bold">{member.role}</span>
+                            )}
+                          </div>
                         </div>
                      ))}
                   </div>
