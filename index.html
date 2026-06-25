@@ -810,7 +810,7 @@
               {currentView === 'dashboard' && <DashboardView currentUser={currentUserMember} events={events} chores={chores} setChores={setChores} announcements={announcements} setAnnouncements={setAnnouncements} onAddEvent={() => setIsEventModalOpen(true)} isAdmin={isAdmin} onAddAnnouncement={() => setIsAnnouncementModalOpen(true)} members={members} setMembers={updateHouseholdMembers} isSyncing={isSyncing} onManualSync={() => syncGoogleCalendar(user, false)} onViewEvent={(e) => setSelectedEvent(e)} />}
               {currentView === 'calendar' && <CalendarView events={events} onAddEvent={(prefillDate) => { setEventDate(prefillDate || getTodayDateString()); setIsEventModalOpen(true); }} onViewEvent={(e) => setSelectedEvent(e)} members={members} />}
               {currentView === 'chores' && <ChoresView chores={chores} setChores={setChores} members={members} setMembers={updateHouseholdMembers} onAddChore={() => setIsChoreModalOpen(true)} isAdmin={isChoreAdmin} />}
-              {currentView === 'progress' && <ProgressView members={members} familyGoal={familyGoal} />}
+              {currentView === 'progress' && <ProgressView members={members} chores={chores} />}
               {currentView === 'photos' && <PhotosView photos={photos} setPhotos={setPhotos} />}
               {currentView === 'settings' && <SettingsView user={user} household={household} setHousehold={updateHouseholdData} members={members} setMembers={updateHouseholdMembers} isAdmin={isAdmin} weather={weather} setWeather={setWeather} />}
             </div>
@@ -1498,7 +1498,7 @@
 
       const updateMemberRole = (memberId, newRole) => {
         setMembers(members.map(m => m.id === memberId ? { ...m, role: newRole } : m));
-        showMessage("Role updated!");
+        showMessage("Role updated successfully!");
       };
 
       return (
@@ -1508,6 +1508,7 @@
             <button onClick={() => setActiveTab('profile')} className={`w-full text-left px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'profile' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>My Profile</button>
             <button onClick={() => setActiveTab('household')} className={`w-full text-left px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'household' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>Household</button>
             <button onClick={() => setActiveTab('members')} className={`w-full text-left px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'members' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>Members</button>
+            <button onClick={() => setActiveTab('roles')} className={`w-full text-left px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'roles' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>Roles & Permissions</button>
             <button onClick={() => setActiveTab('displays')} className={`w-full text-left px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'displays' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>Displays</button>
             <button onClick={() => setActiveTab('integrations')} className={`w-full text-left px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'integrations' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>Integrations</button>
           </div>
@@ -1591,6 +1592,53 @@
                       ) : <button onClick={() => { const code = Math.random().toString(36).substring(2, 8).toUpperCase(); setInviteCode(code); setHousehold({ ...household, inviteCode: code }); }} className="flex items-center gap-2 bg-blue-600 text-white font-medium px-6 py-3 hover:bg-blue-700 rounded-xl transition-colors"><UserPlus size={18} /> Generate Invite</button>}
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'roles' && (
+                <div className="p-8 fade-in">
+                  <h2 className="text-xl font-bold mb-2">Roles & Permissions</h2>
+                  <p className="text-sm text-slate-500 mb-6">Manage what household members can do.</p>
+                  
+                  <div className="space-y-4">
+                    {members.map(member => (
+                      <div key={member.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 text-white rounded-full flex items-center justify-center font-bold shadow-sm" style={{backgroundColor: member.color || '#3B82F6'}}>
+                            {member.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-bold">{member.name}</p>
+                            <p className="text-xs text-slate-500">{member.email}</p>
+                          </div>
+                        </div>
+                        <div>
+                          {isAdmin && member.role !== 'Owner' ? (
+                            <select 
+                              value={member.role || 'Member'} 
+                              onChange={(e) => updateMemberRole(member.id, e.target.value)}
+                              className="text-sm bg-white border border-slate-200 text-slate-700 px-3 py-2 rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm cursor-pointer"
+                            >
+                              <option value="Member">Member</option>
+                              <option value="Household Manager">Household Manager</option>
+                              <option value="Admin">Admin</option>
+                            </select>
+                          ) : (
+                            <span className="text-sm bg-slate-200 text-slate-600 px-3 py-1 rounded-full font-bold">{member.role}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-8 bg-blue-50 p-6 rounded-2xl border border-blue-100">
+                    <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2"><Info size={18}/> Role Permissions Guide</h3>
+                    <ul className="text-sm text-blue-800 space-y-2">
+                      <li><strong className="font-bold">Admin/Owner:</strong> Full access. Can change settings, manage users, edit displays, and manage chores.</li>
+                      <li><strong className="font-bold">Household Manager:</strong> Can assign, toggle, and delete chores for anyone. Cannot change major settings.</li>
+                      <li><strong className="font-bold">Member:</strong> Can view the calendar and check off their own assigned tasks.</li>
+                    </ul>
+                  </div>
                 </div>
               )}
 
