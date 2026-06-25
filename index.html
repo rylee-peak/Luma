@@ -1800,14 +1800,18 @@
 
       const currentMins = time.getHours() * 60 + time.getMinutes();
       
-      const departingEvent = todayEvents.find(e => {
+      // Since events don't have an explicit end time, we assume they last 1 hour.
+      // This filters out events that started more than 60 minutes ago to keep the kiosk clean.
+      const activeTodayEvents = todayEvents.filter(e => parseTimeToMinutes(e.time) + 60 > currentMins);
+      
+      const departingEvent = activeTodayEvents.find(e => {
         const evMins = parseTimeToMinutes(e.time);
         const diff = evMins - currentMins;
         return diff >= 0 && diff <= 30; 
       });
 
       // Show upcoming events for screensaver
-      const upcomingEvents = todayEvents.filter(e => parseTimeToMinutes(e.time) >= currentMins).slice(0, 3);
+      const upcomingEvents = activeTodayEvents.filter(e => parseTimeToMinutes(e.time) >= currentMins).slice(0, 3);
 
       if (isScreensaver) {
         const currentPhoto = photos && photos.length > 0 ? photos[photoIndex].url : null;
@@ -1938,8 +1942,8 @@
             <div className="col-span-2 bg-white rounded-[2rem] p-10 shadow-sm border border-slate-200 flex flex-col min-h-0">
                <h3 className="text-3xl font-bold mb-10 flex items-center gap-4 text-slate-800 shrink-0"><CalendarIcon className="text-orange-500" size={36} /> Today's Schedule</h3>
               <div className="space-y-6 flex-1 overflow-y-auto pr-4">
-                 {todayEvents.length > 0 ? (
-                   todayEvents.map(event => {
+                 {activeTodayEvents.length > 0 ? (
+                   activeTodayEvents.map(event => {
                     const displayTime = formatTimeDisplay(event.time);
                     return (
                       <div key={event.id} className="flex items-center gap-8 bg-slate-50 border border-slate-100 p-8 rounded-3xl relative overflow-hidden shrink-0">
