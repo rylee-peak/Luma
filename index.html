@@ -585,7 +585,8 @@
       if (currentView === 'kiosk') return <KioskMode onExit={() => setCurrentView('dashboard')} household={household} events={events} chores={chores} announcements={announcements} members={members} weather={weather} />;
 
       const currentUserMember = members.find(m => m.id === user.uid);
-      const isAdmin = ['Owner', 'Admin', 'Household Manager'].includes(currentUserMember?.role);
+      const isAdmin = currentUserMember?.role === 'Owner' || currentUserMember?.role === 'Admin';
+      const isChoreAdmin = isAdmin || currentUserMember?.role === 'Household Manager';
 
       return (
         <div className="flex h-screen w-full bg-[#F8FAFC] text-[#0F172A] font-sans overflow-hidden relative">
@@ -808,8 +809,8 @@
             <div className="flex-1 overflow-y-auto p-4 md:p-8 relative">
               {currentView === 'dashboard' && <DashboardView currentUser={currentUserMember} events={events} chores={chores} setChores={setChores} announcements={announcements} setAnnouncements={setAnnouncements} onAddEvent={() => setIsEventModalOpen(true)} isAdmin={isAdmin} onAddAnnouncement={() => setIsAnnouncementModalOpen(true)} members={members} setMembers={updateHouseholdMembers} isSyncing={isSyncing} onManualSync={() => syncGoogleCalendar(user, false)} onViewEvent={(e) => setSelectedEvent(e)} />}
               {currentView === 'calendar' && <CalendarView events={events} onAddEvent={(prefillDate) => { setEventDate(prefillDate || getTodayDateString()); setIsEventModalOpen(true); }} onViewEvent={(e) => setSelectedEvent(e)} members={members} />}
-              {currentView === 'chores' && <ChoresView chores={chores} setChores={setChores} members={members} setMembers={updateHouseholdMembers} onAddChore={() => setIsChoreModalOpen(true)} isAdmin={isAdmin} />}
-              {currentView === 'progress' && <ProgressView members={members} chores={chores} />}
+              {currentView === 'chores' && <ChoresView chores={chores} setChores={setChores} members={members} setMembers={updateHouseholdMembers} onAddChore={() => setIsChoreModalOpen(true)} isAdmin={isChoreAdmin} />}
+              {currentView === 'progress' && <ProgressView members={members} familyGoal={familyGoal} />}
               {currentView === 'photos' && <PhotosView photos={photos} setPhotos={setPhotos} />}
               {currentView === 'settings' && <SettingsView user={user} household={household} setHousehold={updateHouseholdData} members={members} setMembers={updateHouseholdMembers} isAdmin={isAdmin} weather={weather} setWeather={setWeather} />}
             </div>
@@ -1564,7 +1565,7 @@
                           <div className="flex flex-col items-end gap-1">
                             {isAdmin && member.role !== 'Owner' ? (
                               <select 
-                                value={member.role} 
+                                value={member.role || 'Member'} 
                                 onChange={(e) => updateMemberRole(member.id, e.target.value)}
                                 className="text-sm bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm"
                               >
